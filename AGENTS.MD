@@ -240,12 +240,12 @@ DB_PATH=./data/app.db
 
 **MVP**
 
-- [ ] Baileys running, receive and send messages
-- [ ] Phone number whitelist
-- [ ] Claude agent with tool use
-- [ ] Audio transcription (Whisper)
-- [ ] Shopping list (add, list, check, clear)
-- [ ] CrossFit logging (log session, week summary)
+- [x] Baileys running, receive and send messages
+- [x] Phone number whitelist
+- [x] Claude agent with tool use
+- [x] Audio transcription (Whisper)
+- [x] Shopping list (add, list, check, clear)
+- [x] CrossFit logging (log session, week summary, exercise history)
 - [ ] Basic PWA: shopping list view + CrossFit history
 
 **Phase 2**

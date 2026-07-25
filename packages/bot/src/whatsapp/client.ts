@@ -23,9 +23,16 @@ export async function startWhatsAppClient(): Promise<void> {
       qrcode.generate(qr, { small: true });
     }
 
+    if (connection === "open") {
+      console.log("[whatsapp] connected");
+    }
+
     if (connection === "close") {
       const statusCode = (lastDisconnect?.error as Boom | undefined)?.output?.statusCode;
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+      console.log(
+        `[whatsapp] connection closed (status ${statusCode ?? "unknown"}), ${shouldReconnect ? "reconnecting" : "logged out"}`,
+      );
       if (shouldReconnect) {
         void startWhatsAppClient();
       }

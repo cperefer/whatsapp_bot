@@ -2,9 +2,8 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import Anthropic from "@anthropic-ai/sdk";
 import { config } from "../config.js";
-import { shoppingTools } from "./tools/shopping.js";
-import { crossfitTools } from "./tools/crossfit.js";
-import { transcribeTools } from "./tools/transcribe.js";
+import { crossfitTools, executeCrossfitTool, isCrossfitTool } from "./tools/crossfit.js";
+import { executeShoppingTool, isShoppingTool, shoppingTools } from "./tools/shopping.js";
 
 const client = new Anthropic({ apiKey: config.anthropicApiKey });
 
@@ -37,21 +36,62 @@ async function buildSystemPrompt(userMessage: string): Promise<string> {
   return skills.length > 0 ? `${BASE_SYSTEM_PROMPT}\n\n${skills.join("\n\n")}` : BASE_SYSTEM_PROMPT;
 }
 
-const tools = [...shoppingTools, ...crossfitTools, ...transcribeTools];
+const tools = [...shoppingTools, ...crossfitTools];
 
-export async function runAgent(userMessage: string): Promise<string> {
+async function executeTool(
+  name: string,
+  input: Record<string, unknown>,
+  userId: number,
+): Promise<unknown> {
+  if (isShoppingTool(name)) return executeShoppingTool(name, input, userId);
+  if (isCrossfitTool(name)) return executeCrossfitTool(name, input, userId);
+  throw new Error(`Unknown tool: ${name}`);
+}
+
+const MAX_TOOL_ITERATIONS = 5;
+
+export async function runAgent(userMessage: string, userId: number): Promise<string> {
   const system = await buildSystemPrompt(userMessage);
+  const messages: Anthropic.MessageParam[] = [{ role: "user", content: userMessage }];
 
-  const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 1024,
-    system,
-    tools,
-    messages: [{ role: "user", content: userMessage }],
-  });
+  for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
+    const response = await client.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1024,
+      system,
+      tools,
+      messages,
+    });
 
-  // TODO: handle tool_use blocks — execute the matching tool, feed the
-  // result back to Claude, and loop until it returns a final text reply.
-  const textBlock = response.content.find((block) => block.type === "text");
-  return textBlock?.type === "text" ? textBlock.text : "";
+    const toolUseBlocks = response.content.filter((block) => block.type === "tool_use");
+
+    if (toolUseBlocks.length === 0) {
+      const textBlock = response.content.find((block) => block.type === "text");
+      return textBlock?.type === "text" ? textBlock.text : "";
+    }
+
+    messages.push({ role: "assistant", content: response.content });
+
+    const toolResults: Anthropic.ToolResultBlockParam[] = [];
+    for (const block of toolUseBlocks) {
+      try {
+        const result = await executeTool(block.name, block.input as Record<string, unknown>, userId);
+        toolResults.push({
+          type: "tool_result",
+          tool_use_id: block.id,
+          content: JSON.stringify(result),
+        });
+      } catch (error) {
+        toolResults.push({
+          type: "tool_result",
+          tool_use_id: block.id,
+          content: error instanceof Error ? error.message : "Unknown error",
+          is_error: true,
+        });
+      }
+    }
+    messages.push({ role: "user", content: toolResults });
+  }
+
+  return "Lo siento, no he podido completar la solicitud.";
 }
