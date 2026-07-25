@@ -1,0 +1,10 @@
+node_modules/
+dist/
+
+.env
+
+packages/bot/auth_session/*
+!packages/bot/auth_session/.gitkeep
+packages/bot/data/
+
+*.log
