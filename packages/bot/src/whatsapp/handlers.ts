@@ -10,6 +10,10 @@ import { getOrCreateUser } from "../db/users.js";
 // fromMe alone to skip echoes of our own replies — we track them by id instead.
 const sentMessageIds = new Set<string>();
 
+function formatTranscription(text: string): string {
+  return `🎙️ _Transcripción del audio reenviado:_\n${text}`;
+}
+
 // WhatsApp drops the _italic_ markers if they span a blank line, so a single
 // _.../_ wrapper around a multi-paragraph reply renders as literal underscores.
 // Instead we italicize line by line, keeping any leading emoji (e.g. a
@@ -75,6 +79,28 @@ export function registerMessageHandlers(socket: WASocket): void {
         const text =
           message.message?.conversation ?? message.message?.extendedTextMessage?.text;
         const audioMessage = message.message?.audioMessage;
+
+        // A forwarded voice note is content the user wants transcribed, not an
+        // instruction for the agent — only audio recorded directly in-chat
+        // should be handed to runAgent as if it were typed text.
+        const contextInfo = audioMessage?.contextInfo;
+        const isForwarded = Boolean(
+          contextInfo?.isForwarded || (contextInfo?.forwardingScore ?? 0) > 0,
+        );
+
+        if (audioMessage && isForwarded) {
+          const transcription = await transcribeAudio(audioMessage);
+          if (!transcription) {
+            console.log(`[whatsapp] forwarded audio from ${phone} could not be transcribed, skipping`);
+            continue;
+          }
+
+          const formattedTranscription = formatTranscription(transcription);
+          const sent = await socket.sendMessage(remoteJid, { text: formattedTranscription });
+          if (sent?.key.id) sentMessageIds.add(sent.key.id);
+          console.log(`[whatsapp] sent transcription of forwarded audio to ${phone}`);
+          continue;
+        }
 
         const userMessage = audioMessage
           ? await transcribeAudio(audioMessage)
