@@ -55,13 +55,22 @@ whatsapp-agent/
    DB_PATH=./data/app.db
    ```
 
-3. Genera la base de datos SQLite a partir del schema:
+3. Crea la carpeta donde vivirá la base de datos SQLite (no se versiona):
 
    ```bash
+   mkdir packages/bot/data
+   ```
+
+4. Genera las migraciones a partir del schema y aplícalas:
+
+   ```bash
+   npm run db:generate
    npm run db:migrate
    ```
 
-4. Arranca el bot:
+   `db:generate` crea los ficheros SQL en `packages/bot/src/db/migrations/` (si no existen todavía) y `db:migrate` los aplica sobre `DB_PATH`.
+
+5. Arranca el bot:
 
    ```bash
    npm run bot
@@ -69,7 +78,7 @@ whatsapp-agent/
 
    Aparecerá un código QR en la terminal. Ve a WhatsApp → Dispositivos vinculados → Vincular un dispositivo → escanea el QR.
 
-5. La sesión se guarda en `packages/bot/auth_session/` — no hace falta repetir el escaneo en los siguientes arranques.
+6. La sesión se guarda en `packages/bot/auth_session/` — no hace falta repetir el escaneo en los siguientes arranques.
 
 ## Cómo correr el proyecto
 
