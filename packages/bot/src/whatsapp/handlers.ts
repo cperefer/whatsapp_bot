@@ -10,6 +10,24 @@ import { getOrCreateUser } from "../db/users.js";
 // fromMe alone to skip echoes of our own replies — we track them by id instead.
 const sentMessageIds = new Set<string>();
 
+// WhatsApp drops the _italic_ markers if they span a blank line, so a single
+// _.../_ wrapper around a multi-paragraph reply renders as literal underscores.
+// Instead we italicize line by line, keeping any leading emoji (e.g. a
+// shopping list bullet like "🍞 1x Pan") outside the markers so it still shows.
+function formatBotReply(reply: string): string {
+  const lines = reply.split("\n").map((line) => {
+    if (line.trim() === "") return "";
+    const match = line.match(/^(\p{Extended_Pictographic}️?)\s*(.*)$/u);
+    if (match) {
+      const [, emoji, rest] = match;
+      return rest ? `${emoji} _${rest}_` : emoji;
+    }
+    return `_${line}_`;
+  });
+  lines[0] = `🤖 ${lines[0]}`;
+  return lines.join("\n");
+}
+
 // WhatsApp is migrating chats to private "@lid" identifiers instead of the
 // real phone number JID ("@s.whatsapp.net"). When that happens, remoteJid is
 // the opaque LID and the actual phone number travels separately on the key —
@@ -72,7 +90,8 @@ export function registerMessageHandlers(socket: WASocket): void {
         const reply = await runAgent(userMessage, userId);
 
         if (reply) {
-          const sent = await socket.sendMessage(remoteJid, { text: reply });
+          const formattedReply = formatBotReply(reply);
+          const sent = await socket.sendMessage(remoteJid, { text: formattedReply });
           if (sent?.key.id) sentMessageIds.add(sent.key.id);
           console.log(`[whatsapp] replied to ${phone}`);
         } else {
