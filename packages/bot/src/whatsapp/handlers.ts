@@ -3,6 +3,7 @@ import { jidDecode } from "@whiskeysockets/baileys";
 import { config } from "../config.js";
 import { runAgent } from "../agent/index.js";
 import { transcribeAudio } from "../agent/tools/transcribe.js";
+import { describeCreditError } from "../agent/creditErrors.js";
 import { getOrCreateUser } from "../db/users.js";
 
 // IDs of messages the bot itself just sent. In a self-chat, WhatsApp marks
@@ -125,6 +126,12 @@ export function registerMessageHandlers(socket: WASocket): void {
         }
       } catch (error) {
         console.error(`[whatsapp] error handling message from ${phone}:`, error);
+
+        const creditWarning = describeCreditError(error);
+        if (creditWarning) {
+          const sent = await socket.sendMessage(remoteJid, { text: creditWarning });
+          if (sent?.key.id) sentMessageIds.add(sent.key.id);
+        }
       }
     }
   });
