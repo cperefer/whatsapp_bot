@@ -1,12 +1,18 @@
-import { makeWASocket, useMultiFileAuthState, DisconnectReason } from "@whiskeysockets/baileys";
+import {
+  makeWASocket,
+  useMultiFileAuthState,
+  fetchLatestBaileysVersion,
+  DisconnectReason,
+} from "@whiskeysockets/baileys";
 import type { Boom } from "@hapi/boom";
 import qrcode from "qrcode-terminal";
 import { registerMessageHandlers } from "./handlers.js";
 
 export async function startWhatsAppClient(): Promise<void> {
   const { state, saveCreds } = await useMultiFileAuthState("auth_session");
+  const { version } = await fetchLatestBaileysVersion();
 
-  const socket = makeWASocket({ auth: state });
+  const socket = makeWASocket({ auth: state, version });
 
   socket.ev.on("creds.update", saveCreds);
 
