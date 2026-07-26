@@ -49,6 +49,10 @@ function resolvePhone(key: WAMessageKey, socket: WASocket): string | undefined {
   return undefined;
 }
 
+// Cap on how many incoming message ids we remember for dedup purposes, so the
+// set can't grow unbounded over a long-running process.
+const MAX_TRACKED_MESSAGE_IDS = 500;
+
 export function registerMessageHandlers(socket: WASocket, sessionName: string): void {
   // IDs of messages the bot itself just sent. In a self-chat, WhatsApp marks
   // every message as fromMe:true regardless of who typed it, so we can't use
@@ -56,7 +60,21 @@ export function registerMessageHandlers(socket: WASocket, sessionName: string): 
   // Scoped per socket: each linked session has its own message id space.
   const sentMessageIds = new Set<string>();
 
-  socket.ev.on("messages.upsert", async ({ messages }) => {
+  // IDs of incoming messages already handled. When a session gets resynced
+  // (e.g. after the "Bad MAC" / prekey-bundle errors libsignal logs whenever
+  // WhatsApp rotates a device's session), Baileys can redeliver a recently
+  // seen message via messages.upsert — without this guard we'd run the agent
+  // and send the reply a second time.
+  const processedMessageIds = new Set<string>();
+
+  socket.ev.on("messages.upsert", async ({ messages, type }) => {
+    // "append" deliveries are history sync/resync replays, not new messages —
+    // only "notify" is an actual incoming message.
+    if (type !== "notify") {
+      logger.debug(`[whatsapp:${sessionName}] ignoring ${messages.length} message(s) of type ${type}`);
+      return;
+    }
+
     logger.debug(`[whatsapp:${sessionName}] received ${messages.length} message(s)`);
 
     for (const message of messages) {
@@ -64,6 +82,18 @@ export function registerMessageHandlers(socket: WASocket, sessionName: string): 
       if (messageId && sentMessageIds.has(messageId)) {
         sentMessageIds.delete(messageId);
         continue;
+      }
+
+      if (messageId) {
+        if (processedMessageIds.has(messageId)) {
+          logger.debug(`[whatsapp:${sessionName}] duplicate delivery of message ${messageId}, skipping`);
+          continue;
+        }
+        processedMessageIds.add(messageId);
+        if (processedMessageIds.size > MAX_TRACKED_MESSAGE_IDS) {
+          const oldest = processedMessageIds.values().next().value;
+          if (oldest !== undefined) processedMessageIds.delete(oldest);
+        }
       }
 
       const remoteJid = message.key.remoteJid;
