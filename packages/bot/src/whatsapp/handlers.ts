@@ -73,6 +73,19 @@ function resolvePhone(key: WAMessageKey, socket: WASocket): string | undefined {
   return undefined;
 }
 
+// The bot must only ever act on the "Message yourself" chat, never on a
+// conversation with another contact — even one on the ALLOWED_PHONES
+// whitelist. A self-chat's remoteJid is always the account's own JID (its
+// @lid form when WhatsApp has migrated the account to LID identifiers).
+function isSelfChat(remoteJid: string, socket: WASocket): boolean {
+  const decoded = jidDecode(remoteJid);
+  const me = socket.authState.creds.me;
+  if (!decoded || !me) return false;
+
+  if (decoded.server === "lid") return jidDecode(me.lid)?.user === decoded.user;
+  return jidDecode(me.id)?.user === decoded.user;
+}
+
 // Cap on how many incoming message ids we remember for dedup purposes, so the
 // set can't grow unbounded over a long-running process.
 const MAX_TRACKED_MESSAGE_IDS = 500;
@@ -124,6 +137,11 @@ export function registerMessageHandlers(socket: WASocket, sessionName: string): 
       const phone = resolvePhone(message.key, socket);
       if (!remoteJid || !phone) {
         logger.debug(`[whatsapp:${sessionName}] could not resolve a phone number for jid ${remoteJid ?? "unknown"}, skipping`);
+        continue;
+      }
+
+      if (!isSelfChat(remoteJid, socket)) {
+        logger.debug(`[whatsapp:${sessionName}] ignoring message outside self-chat (from ${redactPhone(phone)})`);
         continue;
       }
 
