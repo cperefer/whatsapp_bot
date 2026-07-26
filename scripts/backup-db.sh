@@ -6,7 +6,13 @@
 # Prerequisites (one-time, manual):
 #   - rclone installed: curl https://rclone.org/install.sh | sudo bash
 #   - a B2 remote named "b2" configured: rclone config
-#   - update B2_REMOTE below with your actual bucket name
+#   - B2_REMOTE=b2:your-bucket/whatsapp-bot added to /opt/app/.env
+#
+# B2_REMOTE lives in .env (not hardcoded here) because this script is a
+# tracked file: /opt/app is reset with `git reset --hard` on every deploy
+# (see deploy.sh), so any value edited directly into this file on the VPS
+# would silently disappear on the next push. .env is gitignored and never
+# touched by that reset.
 #
 # Uses `sqlite3 .backup` instead of `cp` so the copy is a consistent snapshot
 # even while the bot is writing to the database (plain cp of a WAL-mode file
@@ -14,11 +20,24 @@
 
 set -euo pipefail
 
+APP_ENV_FILE="/opt/app/.env"
 DB_PATH="/opt/app/packages/bot/data/app.db"
 STAGING_DIR="/opt/backups"
-B2_REMOTE="b2:REPLACE_WITH_YOUR_BUCKET/whatsapp-bot"
 TIMESTAMP="$(date +%Y-%m-%d_%H-%M)"
 BACKUP_FILE="${STAGING_DIR}/app-${TIMESTAMP}.db"
+
+if [ -f "$APP_ENV_FILE" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$APP_ENV_FILE"
+  set +a
+fi
+
+if [ -z "${B2_REMOTE:-}" ]; then
+  echo "ERROR: B2_REMOTE is not set. Add a line like the following to $APP_ENV_FILE:" >&2
+  echo "  B2_REMOTE=b2:your-bucket/whatsapp-bot" >&2
+  exit 1
+fi
 
 mkdir -p "$STAGING_DIR"
 

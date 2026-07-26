@@ -360,7 +360,7 @@ rm ./gh_deploy_key ./gh_deploy_key.pub
 
 - **pm2 survives reboots**: `pm2 startup` (run once during first deploy) installs a systemd unit that resurrects `pm2 save`'d processes on boot. Re-run `pm2 save` any time the process list changes.
 - **Sessions and DB never touch git**: `packages/bot/auth_sessions/` (one subfolder per user) and `packages/bot/data/` are `.gitignore`d; `git reset --hard` in `deploy.sh` cannot delete them.
-- **Backups**: `scripts/backup-db.sh` takes a consistent `sqlite3 .backup` snapshot (safe under WAL mode, unlike a raw `cp`) and uploads it to Backblaze B2 via `rclone`. One-time setup: install `rclone`, run `rclone config` to add a `b2` remote, edit `B2_REMOTE` in the script, then set a lifecycle rule on the B2 bucket to auto-expire old backups instead of scripting retention. Schedule it as the `deploy` user:
+- **Backups**: `scripts/backup-db.sh` takes a consistent `sqlite3 .backup` snapshot (safe under WAL mode, unlike a raw `cp`) and uploads it to Backblaze B2 via `rclone`. One-time setup: install `rclone`, run `rclone config` to add a `b2` remote, add `B2_REMOTE=b2:your-bucket/whatsapp-bot` to `/opt/app/.env` (not hardcoded in the script itself, since `/opt/app` is `git reset --hard` on every deploy and would wipe it), then set a lifecycle rule on the B2 bucket to auto-expire old backups instead of scripting retention. Schedule it as the `deploy` user:
   ```bash
   crontab -e
   # 0 3 * * * /opt/app/scripts/backup-db.sh >> /opt/backups/backup.log 2>&1
