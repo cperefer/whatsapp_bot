@@ -1,3 +1,4 @@
+import { config } from "./config.js";
 import { startWhatsAppClient } from "./whatsapp/client.js";
 
-await startWhatsAppClient();
+await Promise.all(config.whatsappSessions.map((sessionName) => startWhatsAppClient(sessionName)));

@@ -6,11 +6,6 @@ import { transcribeAudio } from "../agent/tools/transcribe.js";
 import { describeCreditError } from "../agent/creditErrors.js";
 import { getOrCreateUser } from "../db/users.js";
 
-// IDs of messages the bot itself just sent. In a self-chat, WhatsApp marks
-// every message as fromMe:true regardless of who typed it, so we can't use
-// fromMe alone to skip echoes of our own replies — we track them by id instead.
-const sentMessageIds = new Set<string>();
-
 function formatTranscription(text: string): string {
   return `🎙️ _Transcripción del audio reenviado:_\n${text}`;
 }
@@ -53,9 +48,15 @@ function resolvePhone(key: WAMessageKey, socket: WASocket): string | undefined {
   return undefined;
 }
 
-export function registerMessageHandlers(socket: WASocket): void {
+export function registerMessageHandlers(socket: WASocket, sessionName: string): void {
+  // IDs of messages the bot itself just sent. In a self-chat, WhatsApp marks
+  // every message as fromMe:true regardless of who typed it, so we can't use
+  // fromMe alone to skip echoes of our own replies — we track them by id instead.
+  // Scoped per socket: each linked session has its own message id space.
+  const sentMessageIds = new Set<string>();
+
   socket.ev.on("messages.upsert", async ({ messages }) => {
-    console.log(`[whatsapp] received ${messages.length} message(s)`);
+    console.log(`[whatsapp:${sessionName}] received ${messages.length} message(s)`);
 
     for (const message of messages) {
       const messageId = message.key.id;
@@ -67,12 +68,12 @@ export function registerMessageHandlers(socket: WASocket): void {
       const remoteJid = message.key.remoteJid;
       const phone = resolvePhone(message.key, socket);
       if (!remoteJid || !phone) {
-        console.log(`[whatsapp] could not resolve a phone number for jid ${remoteJid ?? "unknown"}, skipping`);
+        console.log(`[whatsapp:${sessionName}] could not resolve a phone number for jid ${remoteJid ?? "unknown"}, skipping`);
         continue;
       }
 
       if (!config.allowedPhones.includes(phone)) {
-        console.log(`[whatsapp] ignored message from non-whitelisted number ${phone}`);
+        console.log(`[whatsapp:${sessionName}] ignored message from non-whitelisted number ${phone}`);
         continue;
       }
 
@@ -92,14 +93,14 @@ export function registerMessageHandlers(socket: WASocket): void {
         if (audioMessage && isForwarded) {
           const transcription = await transcribeAudio(audioMessage);
           if (!transcription) {
-            console.log(`[whatsapp] forwarded audio from ${phone} could not be transcribed, skipping`);
+            console.log(`[whatsapp:${sessionName}] forwarded audio from ${phone} could not be transcribed, skipping`);
             continue;
           }
 
           const formattedTranscription = formatTranscription(transcription);
           const sent = await socket.sendMessage(remoteJid, { text: formattedTranscription });
           if (sent?.key.id) sentMessageIds.add(sent.key.id);
-          console.log(`[whatsapp] sent transcription of forwarded audio to ${phone}`);
+          console.log(`[whatsapp:${sessionName}] sent transcription of forwarded audio to ${phone}`);
           continue;
         }
 
@@ -108,24 +109,25 @@ export function registerMessageHandlers(socket: WASocket): void {
           : text;
 
         if (!userMessage) {
-          console.log(`[whatsapp] message from ${phone} had no readable text/audio, skipping`);
+          console.log(`[whatsapp:${sessionName}] message from ${phone} had no readable text/audio, skipping`);
           continue;
         }
 
-        console.log(`[whatsapp] processing message from ${phone}`);
-        const userId = await getOrCreateUser(phone, message.pushName ?? phone);
-        const reply = await runAgent(userMessage, userId);
+        console.log(`[whatsapp:${sessionName}] processing message from ${phone}`);
+        const userName = message.pushName ?? phone;
+        const userId = await getOrCreateUser(phone, userName);
+        const reply = await runAgent(userMessage, userId, userName);
 
         if (reply) {
           const formattedReply = formatBotReply(reply);
           const sent = await socket.sendMessage(remoteJid, { text: formattedReply });
           if (sent?.key.id) sentMessageIds.add(sent.key.id);
-          console.log(`[whatsapp] replied to ${phone}`);
+          console.log(`[whatsapp:${sessionName}] replied to ${phone}`);
         } else {
-          console.log(`[whatsapp] agent returned no reply for ${phone}`);
+          console.log(`[whatsapp:${sessionName}] agent returned no reply for ${phone}`);
         }
       } catch (error) {
-        console.error(`[whatsapp] error handling message from ${phone}:`, error);
+        console.error(`[whatsapp:${sessionName}] error handling message from ${phone}:`, error);
 
         const creditWarning = describeCreditError(error);
         if (creditWarning) {

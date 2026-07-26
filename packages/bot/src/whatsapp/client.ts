@@ -8,8 +8,11 @@ import type { Boom } from "@hapi/boom";
 import qrcode from "qrcode-terminal";
 import { registerMessageHandlers } from "./handlers.js";
 
-export async function startWhatsAppClient(): Promise<void> {
-  const { state, saveCreds } = await useMultiFileAuthState("auth_session");
+// Each user gets their own linked device (own auth folder), so each has an
+// independent WhatsApp session paired to their own account instead of all
+// of them sharing a single number.
+export async function startWhatsAppClient(sessionName: string): Promise<void> {
+  const { state, saveCreds } = await useMultiFileAuthState(`auth_sessions/${sessionName}`);
   const { version } = await fetchLatestBaileysVersion();
 
   const socket = makeWASocket({ auth: state, version });
@@ -20,24 +23,25 @@ export async function startWhatsAppClient(): Promise<void> {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
+      console.log(`[whatsapp:${sessionName}] scan this QR code from that person's phone (WhatsApp → Linked devices):`);
       qrcode.generate(qr, { small: true });
     }
 
     if (connection === "open") {
-      console.log("[whatsapp] connected");
+      console.log(`[whatsapp:${sessionName}] connected`);
     }
 
     if (connection === "close") {
       const statusCode = (lastDisconnect?.error as Boom | undefined)?.output?.statusCode;
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
       console.log(
-        `[whatsapp] connection closed (status ${statusCode ?? "unknown"}), ${shouldReconnect ? "reconnecting" : "logged out"}`,
+        `[whatsapp:${sessionName}] connection closed (status ${statusCode ?? "unknown"}), ${shouldReconnect ? "reconnecting" : "logged out"}`,
       );
       if (shouldReconnect) {
-        void startWhatsAppClient();
+        void startWhatsAppClient(sessionName);
       }
     }
   });
 
-  registerMessageHandlers(socket);
+  registerMessageHandlers(socket, sessionName);
 }
