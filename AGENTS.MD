@@ -312,6 +312,7 @@ cd /opt/app
 # lists every user (e.g. "Miguel,Alicia") before starting the process:
 #   scp .env deploy@<vps-ip>:/opt/app/.env
 npm install --workspace=packages/bot
+mkdir -p packages/bot/data   # not tracked by git — a fresh clone won't have it
 npm run db:migrate --workspace=packages/bot
 pm2 start packages/bot/ecosystem.config.cjs
 pm2 save

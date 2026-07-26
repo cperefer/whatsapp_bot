@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Runs ON THE VPS, invoked over SSH by .github/workflows/deploy.yml on every
-# push to main. Also safe to run manually for the first deploy or to force
+# push to master. Also safe to run manually for the first deploy or to force
 # a redeploy: ssh deploy@<host> 'bash /opt/app/scripts/deploy.sh'
 #
 # Fails loudly on purpose: `set -euo pipefail` plus an explicit post-restart
@@ -22,6 +22,9 @@ git reset --hard origin/master
 
 echo "==> Installing dependencies (bot workspace only)"
 npm install --workspace="$BOT_WORKSPACE" --no-audit --no-fund
+
+# Not tracked by git (holds the SQLite DB) -- a fresh clone won't have it.
+mkdir -p "$BOT_WORKSPACE/data"
 
 echo "==> Running Drizzle migrations"
 npm run db:migrate --workspace="$BOT_WORKSPACE"
