@@ -94,10 +94,10 @@ whatsapp-agent/
 
 ## Seguridad
 
-- `auth_sessions/` y `.env` nunca se versionan (están en `.gitignore`)
-- Cada usuario tiene su propia sesión de WhatsApp vinculada a su propio número; nunca se enrutan mensajes de un usuario a través de la sesión de otro
-- Todo mensaje entrante se valida contra `ALLOWED_PHONES` antes de procesarse; cualquier número no autorizado se ignora silenciosamente
-- No se registra el contenido de los mensajes en producción
+- `auth_sessions/` y `.env` nunca se versionan (están en `.gitignore`).
+- Cada usuario tiene su propia sesión de WhatsApp vinculada a su propio número; nunca se enrutan mensajes de un usuario a través de la sesión de otro.
+- Todo mensaje entrante se valida contra `ALLOWED_PHONES` antes de procesarse; cualquier número no autorizado se ignora silenciosamente.
+- No se registra el contenido de los mensajes en producción.
 
 ## Más información
 
