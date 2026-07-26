@@ -1,7 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { and, asc, desc, eq, gte } from "drizzle-orm";
 import { db } from "../../db/index.js";
-import { crossfitExercises, crossfitSessions } from "../../db/schema.js";
+import { crossfitExercises, crossfitPrs, crossfitSessions } from "../../db/schema.js";
 
 export const crossfitTools: Anthropic.Tool[] = [
   {
@@ -47,6 +47,29 @@ export const crossfitTools: Anthropic.Tool[] = [
         name: { type: "string" },
       },
       required: ["name"],
+    },
+  },
+  {
+    name: "save_pr",
+    description:
+      "Save or update the user's personal record (RM) for an exercise at a given rep count. If a PR already exists for that exercise and rep count, it is overwritten with the new value.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        reps: { type: "number" },
+        result: { type: "number" },
+        unit: { type: "string", description: "e.g. kg, meters, minutes:seconds" },
+      },
+      required: ["name", "reps", "result", "unit"],
+    },
+  },
+  {
+    name: "get_prs",
+    description: "Get all of the user's saved personal records (RMs).",
+    input_schema: {
+      type: "object",
+      properties: {},
     },
   },
 ];
@@ -136,6 +159,41 @@ export async function executeCrossfitTool(
         .where(and(eq(crossfitSessions.userId, userId), eq(crossfitExercises.name, exerciseName)))
         .orderBy(asc(crossfitSessions.date));
 
+      return rows;
+    }
+    case "save_pr": {
+      const prName = String(input.name);
+      const reps = Number(input.reps);
+      const result = Number(input.result);
+      const unit = String(input.unit);
+
+      const existing = db
+        .select({ id: crossfitPrs.id })
+        .from(crossfitPrs)
+        .where(
+          and(eq(crossfitPrs.userId, userId), eq(crossfitPrs.name, prName), eq(crossfitPrs.reps, reps)),
+        )
+        .get();
+
+      if (existing) {
+        await db.update(crossfitPrs).set({ result, unit }).where(eq(crossfitPrs.id, existing.id));
+      } else {
+        await db.insert(crossfitPrs).values({ userId, name: prName, reps, result, unit });
+      }
+
+      return { ok: true };
+    }
+    case "get_prs": {
+      const rows = await db
+        .select({
+          name: crossfitPrs.name,
+          reps: crossfitPrs.reps,
+          result: crossfitPrs.result,
+          unit: crossfitPrs.unit,
+        })
+        .from(crossfitPrs)
+        .where(eq(crossfitPrs.userId, userId))
+        .orderBy(asc(crossfitPrs.name));
       return rows;
     }
     default:

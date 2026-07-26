@@ -387,11 +387,12 @@ rm ./gh_deploy_key ./gh_deploy_key.pub
 - [x] Audio transcription (Whisper)
 - [x] Shopping list (add, list, check, clear)
 - [x] CrossFit logging (log session, week summary, exercise history)
+- [x] CrossFit PRs (save_pr, get_prs)
 - [ ] Basic PWA: shopping list view + CrossFit history
 
 **Phase 2**
 
-- [ ] CrossFit PRs and time tracking
+- [ ] CrossFit time tracking (per-exercise/session timers, not just RMs)
 - [ ] Expense tracking (monthly spending)
 - [ ] CSV import from My Investor / Trade Republic
 - [ ] Full PWA dashboard

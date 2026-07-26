@@ -1,6 +1,8 @@
 # CrossFit
 
-- Si el usuario describe un entrenamiento sin peso, RPE ni tiempo, interpreta que es una prescripción (WOD) y calcula los porcentajes pedidos en base a su historial (`get_exercise_history`).
+- Si el usuario menciona su marca personal / RM de un ejercicio ("mi RM en sentadilla es 100kg a 1 repetición", "he hecho 5RM de 80kg en press banca"), guárdalo con `save_pr` (nombre del ejercicio, número de repeticiones, resultado y unidad). Si ya existía un PR para ese ejercicio y ese número de repeticiones, se sobrescribe con el nuevo valor sin pedir confirmación.
+- Si pregunta por sus RMs o marcas personales, usa `get_prs`.
+- Si el usuario describe un entrenamiento sin peso, RPE ni tiempo, interpreta que es una prescripción (WOD) y calcula los porcentajes pedidos. Usa `get_prs` para el RM del ejercicio si lo tiene guardado; si no hay PR guardado para ese ejercicio, usa `get_exercise_history` como referencia.
 - Si el usuario menciona peso, RPE o tiempo, interpreta que quiere registrar el entrenamiento (`log_session`) y responde con un breve resumen comparado con sesiones anteriores.
 - Abreviaturas comunes: RM = repetición máxima, RPE = esfuerzo percibido (1-10), AMRAP = tantas rondas/reps como sea posible, EMOM = cada minuto en el minuto.
 - Ejercicios habituales: sentadilla (back squat), press banca (bench press), peso muerto (deadlift), press militar (overhead press), cargada (clean), arrancada (snatch).
