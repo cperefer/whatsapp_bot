@@ -27,10 +27,10 @@ TIMESTAMP="$(date +%Y-%m-%d_%H-%M)"
 BACKUP_FILE="${STAGING_DIR}/app-${TIMESTAMP}.db"
 
 if [ -f "$APP_ENV_FILE" ]; then
-  set -a
-  # shellcheck disable=SC1090
-  source "$APP_ENV_FILE"
-  set +a
+  # Read just this one key instead of sourcing the whole file: .env also
+  # defines its own DB_PATH (a relative path meant for the bot process,
+  # whose cwd is packages/bot) which would otherwise clobber DB_PATH above.
+  B2_REMOTE="$(grep -m1 '^B2_REMOTE=' "$APP_ENV_FILE" | cut -d= -f2-)"
 fi
 
 if [ -z "${B2_REMOTE:-}" ]; then
