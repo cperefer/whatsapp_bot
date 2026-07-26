@@ -3,8 +3,9 @@ dist/
 
 .env
 
-packages/bot/auth_session/*
-!packages/bot/auth_session/.gitkeep
+packages/bot/auth_session/
+packages/bot/auth_sessions/*
+!packages/bot/auth_sessions/.gitkeep
 packages/bot/data/
 
 *.log

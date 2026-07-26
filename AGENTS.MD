@@ -8,6 +8,8 @@ Source of truth for this project. Read this file in full before touching anythin
 
 A personal WhatsApp bot connected to AI agents (Claude) for strictly private use (2 users: Miguel and his partner). This is not a commercial product. No SEO, no external users, no scaling requirements.
 
+Each user links the bot as an additional linked device on their **own** WhatsApp account (their own number, own self-chat) — there is no single shared bot number. Both sessions run in the same process and talk to the same database, so cross-user features (the shared shopping list) work while per-user data (CrossFit logs) stays isolated by `user_id`.
+
 **MVP use cases:**
 
 - WhatsApp audio transcription
@@ -52,13 +54,15 @@ whatsapp-agent/
 │   ├── bot/
 │   │   ├── package.json
 │   │   ├── tsconfig.json
-│   │   ├── auth_session/         # Baileys session — never commit
+│   │   ├── auth_sessions/        # one Baileys session folder per user — never commit
+│   │   │   ├── user1/
+│   │   │   └── user2/
 │   │   └── src/
-│   │       ├── index.ts          # entry point
+│   │       ├── index.ts          # entry point — starts one WhatsApp client per session
 │   │       ├── config.ts         # typed and validated env vars
 │   │       │
 │   │       ├── whatsapp/
-│   │       │   ├── client.ts     # Baileys connection, QR, session
+│   │       │   ├── client.ts     # Baileys connection, QR, session (one instance per user)
 │   │       │   └── handlers.ts   # message router by type
 │   │       │
 │   │       ├── agent/
@@ -197,6 +201,7 @@ When the user asks to retrieve the shopping list, assume they want to read it.
 ANTHROPIC_API_KEY=
 OPENAI_API_KEY=               # for Whisper
 ALLOWED_PHONES=34612345678,34698765432   # authorized numbers whitelist
+WHATSAPP_SESSIONS=user1,user2          # one linked-device session per user, auth stored in auth_sessions/<name>/
 DB_PATH=./data/app.db
 ```
 
@@ -219,20 +224,21 @@ DB_PATH=./data/app.db
 
 ## Security
 
-- `auth_session/` and `.env` always in `.gitignore`
+- `auth_sessions/` and `.env` always in `.gitignore`
 - Validate `ALLOWED_PHONES` on every incoming message before processing — the bot silently ignores any unauthorized number
 - Do not log message content in production
+- Every user has their own linked WhatsApp session (own auth folder, own phone). Do not merge sessions or route one user's messages through another's socket — that's what keeps each person's own chat private
 
 ---
 
 ## First run
 
 1. `npm install` from the root
-2. Copy `.env.example` to `.env` and fill in the keys
+2. Copy `.env.example` to `.env`, fill in the keys, and set `WHATSAPP_SESSIONS` to one name per user (e.g. `user1,user2`)
 3. `npm run db:migrate` to create the schema
-4. `npm run bot` — a QR code appears in the terminal
-5. WhatsApp → Linked devices → Link a device → scan QR
-6. Session is saved in `auth_session/`, no need to repeat this step
+4. `npm run bot` — one QR code appears per session in `WHATSAPP_SESSIONS`, labeled `[whatsapp:<name>]`
+5. Each user scans their own QR from their own phone: WhatsApp → Linked devices → Link a device
+6. Each session is saved in `auth_sessions/<name>/`, no need to repeat this step for that user
 
 ---
 

@@ -19,5 +19,8 @@ export const config = {
   allowedPhones: requireEnv("ALLOWED_PHONES")
     .split(",")
     .map((phone) => phone.trim()),
+  whatsappSessions: requireEnv("WHATSAPP_SESSIONS")
+    .split(",")
+    .map((session) => session.trim()),
   dbPath: process.env.DB_PATH ?? "./data/app.db",
 } as const;

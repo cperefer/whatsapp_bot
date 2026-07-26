@@ -1,6 +1,8 @@
 # WhatsApp AI Bot
 
-Bot personal de WhatsApp conectado a agentes de IA (Claude) para uso estrictamente privado (2 usuarios: Miguel y su pareja). No es un producto comercial: sin SEO, sin usuarios externos, sin requisitos de escalado.
+Bot personal de WhatsApp conectado a agentes de IA (Claude) para uso estrictamente privado (2 usuarios). No es un producto comercial: sin SEO, sin usuarios externos, sin requisitos de escalado.
+
+Cada usuario vincula el bot como dispositivo adicional en su **propio** WhatsApp (su propio número, su propio self-chat) — no existe un único número de bot compartido. Ambas sesiones corren en el mismo proceso y comparten base de datos, así que la lista de la compra sigue siendo común mientras que los datos de CrossFit quedan aislados por usuario.
 
 ## Funcionalidades (MVP)
 
@@ -13,15 +15,15 @@ Bot personal de WhatsApp conectado a agentes de IA (Claude) para uso estrictamen
 
 ## Stack
 
-| Capa           | Tecnología                           | Motivo                                                   |
-| -------------- | ------------------------------------ | --------------------------------------------------------- |
-| WhatsApp       | Baileys                              | Uso personal, sin API de Meta, sin número extra           |
-| Runtime        | Node.js + TypeScript                 | Tipado estricto                                            |
-| IA             | Anthropic SDK (`claude-sonnet-4-6`)  | Tool use nativo, mejor razonamiento                        |
-| Base de datos  | SQLite + Drizzle ORM                 | Sin servidor, suficiente para 2 usuarios                   |
-| Transcripción  | OpenAI Whisper API                   | Mejor calidad, fácil de integrar                           |
-| Frontend       | React + Vite + Tailwind              | PWA simple, sin necesidad de SSR/SEO                       |
-| Monorepo       | npm workspaces                       | Sin sobre-ingeniería (sin Turborepo por ahora)             |
+| Capa          | Tecnología                          | Motivo                                          |
+| ------------- | ----------------------------------- | ----------------------------------------------- |
+| WhatsApp      | Baileys                             | Uso personal, sin API de Meta, sin número extra |
+| Runtime       | Node.js + TypeScript                | Tipado estricto                                 |
+| IA            | Anthropic SDK (`claude-sonnet-4-6`) | Tool use nativo, mejor razonamiento             |
+| Base de datos | SQLite + Drizzle ORM                | Sin servidor, suficiente para 2 usuarios        |
+| Transcripción | OpenAI Whisper API                  | Mejor calidad, fácil de integrar                |
+| Frontend      | React + Vite + Tailwind             | PWA simple, sin necesidad de SSR/SEO            |
+| Monorepo      | npm workspaces                      | Sin sobre-ingeniería (sin Turborepo por ahora)  |
 
 Toda la lógica y las decisiones de arquitectura están documentadas en [`AGENTS.MD`](./AGENTS.MD).
 
@@ -52,6 +54,7 @@ whatsapp-agent/
    ANTHROPIC_API_KEY=
    OPENAI_API_KEY=               # para Whisper
    ALLOWED_PHONES=34612345678,34698765432   # whitelist de números autorizados
+   WHATSAPP_SESSIONS=user1,user2          # una sesión (dispositivo vinculado) por usuario
    DB_PATH=./data/app.db
    ```
 
@@ -76,22 +79,23 @@ whatsapp-agent/
    npm run bot
    ```
 
-   Aparecerá un código QR en la terminal. Ve a WhatsApp → Dispositivos vinculados → Vincular un dispositivo → escanea el QR.
+   Aparecerá un código QR en la terminal **por cada nombre en `WHATSAPP_SESSIONS`**, etiquetado como `[whatsapp:<nombre>]`. Cada persona escanea el suyo desde su propio móvil: WhatsApp → Dispositivos vinculados → Vincular un dispositivo.
 
-6. La sesión se guarda en `packages/bot/auth_session/` — no hace falta repetir el escaneo en los siguientes arranques.
+6. Cada sesión se guarda en `packages/bot/auth_sessions/<nombre>/` — no hace falta repetir el escaneo para ese usuario en los siguientes arranques.
 
 ## Cómo correr el proyecto
 
-| Comando               | Descripción                                      |
-| ---------------------- | ------------------------------------------------- |
-| `npm run bot`          | Arranca el bot de WhatsApp en modo desarrollo      |
-| `npm run web`          | Arranca el dashboard PWA en modo desarrollo        |
-| `npm run db:generate`  | Genera una nueva migración a partir del schema     |
-| `npm run db:migrate`   | Aplica las migraciones pendientes a la base de datos |
+| Comando               | Descripción                                          |
+| --------------------- | ---------------------------------------------------- |
+| `npm run bot`         | Arranca el bot de WhatsApp en modo desarrollo        |
+| `npm run web`         | Arranca el dashboard PWA en modo desarrollo          |
+| `npm run db:generate` | Genera una nueva migración a partir del schema       |
+| `npm run db:migrate`  | Aplica las migraciones pendientes a la base de datos |
 
 ## Seguridad
 
-- `auth_session/` y `.env` nunca se versionan (están en `.gitignore`)
+- `auth_sessions/` y `.env` nunca se versionan (están en `.gitignore`)
+- Cada usuario tiene su propia sesión de WhatsApp vinculada a su propio número; nunca se enrutan mensajes de un usuario a través de la sesión de otro
 - Todo mensaje entrante se valida contra `ALLOWED_PHONES` antes de procesarse; cualquier número no autorizado se ignora silenciosamente
 - No se registra el contenido de los mensajes en producción
 

@@ -7,8 +7,10 @@ import { executeShoppingTool, isShoppingTool, shoppingTools } from "./tools/shop
 
 const client = new Anthropic({ apiKey: config.anthropicApiKey });
 
-const BASE_SYSTEM_PROMPT = `
-You are a personal WhatsApp assistant for Miguel and his partner.
+function baseSystemPrompt(userName: string): string {
+  return `
+You are a personal WhatsApp assistant shared by two people who each talk to you on their own separate chat.
+You are currently talking to ${userName}. Never address them by any other name.
 Always respond in Spanish, concisely and naturally.
 Never use Markdown formatting in responses (WhatsApp does not render it).
 When the user describes a workout without any time, RPE or kilograms, assume they want you to calculate the percentages prescribed in the workout to do it.
@@ -16,6 +18,7 @@ When the user mentions a workout with time, RPE or kilograms, assume they want t
 When the user mentions a product, assume they want to add it to the shopping list.
 When the user asks to retrieve the shopping list, assume they want to read it.
 `.trim();
+}
 
 const SKILLS_DIR = fileURLToPath(new URL("./skills/", import.meta.url));
 
@@ -23,7 +26,8 @@ async function loadSkill(name: "shopping" | "crossfit"): Promise<string> {
   return readFile(`${SKILLS_DIR}${name}.md`, "utf-8");
 }
 
-async function buildSystemPrompt(userMessage: string): Promise<string> {
+async function buildSystemPrompt(userMessage: string, userName: string): Promise<string> {
+  const base = baseSystemPrompt(userName);
   const skills: string[] = [];
 
   if (/compra|comprar|lista/i.test(userMessage)) {
@@ -33,7 +37,7 @@ async function buildSystemPrompt(userMessage: string): Promise<string> {
     skills.push(await loadSkill("crossfit"));
   }
 
-  return skills.length > 0 ? `${BASE_SYSTEM_PROMPT}\n\n${skills.join("\n\n")}` : BASE_SYSTEM_PROMPT;
+  return skills.length > 0 ? `${base}\n\n${skills.join("\n\n")}` : base;
 }
 
 const tools = [...shoppingTools, ...crossfitTools];
@@ -50,8 +54,8 @@ async function executeTool(
 
 const MAX_TOOL_ITERATIONS = 5;
 
-export async function runAgent(userMessage: string, userId: number): Promise<string> {
-  const system = await buildSystemPrompt(userMessage);
+export async function runAgent(userMessage: string, userId: number, userName: string): Promise<string> {
+  const system = await buildSystemPrompt(userMessage, userName);
   const messages: Anthropic.MessageParam[] = [{ role: "user", content: userMessage }];
 
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
