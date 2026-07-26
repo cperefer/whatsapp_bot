@@ -163,7 +163,7 @@ crossfit_prs: {
 
 ### Skills (context snippets)
 
-Agents have "skills": Markdown files in `agent/skills/` that are dynamically injected into the system prompt based on the message domain. Example: if the message is about CrossFit, `skills/crossfit.md` is injected with context about how to interpret exercises, common abbreviations, and expected response format.
+Agents have "skills": Markdown files in `agent/skills/` with domain-specific context (how to interpret exercises, common abbreviations, expected response format, etc.). Both skills are always injected into the system prompt on every message — earlier this was keyword-matched per message (e.g. only load `crossfit.md` if the text contained "wod"/"rpe"/...), but real workout messages (WODs pasted from a program, gym jargon like "EMOM"/"T&G") don't reliably contain any fixed keyword list, so that silently dropped the skill (and its instructions, like checking saved PRs before asking the user for their RM) on real messages. Both files are small and the base prompt already restricts the agent to just these two domains, so always loading both trades a bit of context for a lot more reliability.
 
 ### Base system prompt
 

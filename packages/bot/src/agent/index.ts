@@ -32,18 +32,17 @@ async function loadSkill(name: "shopping" | "crossfit"): Promise<string> {
   return readFile(`${SKILLS_DIR}${name}.md`, "utf-8");
 }
 
-async function buildSystemPrompt(userMessage: string, userName: string): Promise<string> {
+// Both skills are always injected rather than keyword-matched against the
+// message: real workout messages (WODs pasted from a program, gym jargon like
+// "EMOM"/"T&G"/exercise names) don't reliably contain any fixed keyword list,
+// which previously caused the crossfit skill (and its "check get_prs first"
+// instruction) to silently not load. Both files are small, and the base
+// prompt already restricts the agent to just these two domains, so always
+// loading both costs a bit of context for a lot more reliability.
+async function buildSystemPrompt(userName: string): Promise<string> {
   const base = baseSystemPrompt(userName);
-  const skills: string[] = [];
-
-  if (/compra|comprar|lista/i.test(userMessage)) {
-    skills.push(await loadSkill("shopping"));
-  }
-  if (/crossfit|entren|wod|rm|rpe|series|repeticiones|progres|evoluc|conclusi|análisis|analisis|cómo voy|como voy|racha|constancia/i.test(userMessage)) {
-    skills.push(await loadSkill("crossfit"));
-  }
-
-  return skills.length > 0 ? `${base}\n\n${skills.join("\n\n")}` : base;
+  const [shopping, crossfit] = await Promise.all([loadSkill("shopping"), loadSkill("crossfit")]);
+  return `${base}\n\n${shopping}\n\n${crossfit}`;
 }
 
 const tools = [...shoppingTools, ...crossfitTools];
@@ -61,7 +60,7 @@ async function executeTool(
 const MAX_TOOL_ITERATIONS = 5;
 
 export async function runAgent(userMessage: string, userId: number, userName: string): Promise<string> {
-  const system = await buildSystemPrompt(userMessage, userName);
+  const system = await buildSystemPrompt(userName);
   const messages: Anthropic.MessageParam[] = [{ role: "user", content: userMessage }];
 
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
