@@ -16,9 +16,9 @@ APP_NAME="whatsapp-bot"
 
 cd "$APP_DIR"
 
-echo "==> Fetching latest main"
-git fetch origin main
-git reset --hard origin/main
+echo "==> Fetching latest master"
+git fetch origin master
+git reset --hard origin/master
 
 echo "==> Installing dependencies (bot workspace only)"
 npm install --workspace="$BOT_WORKSPACE" --no-audit --no-fund

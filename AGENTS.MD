@@ -246,7 +246,7 @@ DB_PATH=./data/app.db
 
 ## Deployment
 
-Production runs on a single Hetzner Cloud VPS (CX22/CX23, Ubuntu 24.04) via `pm2`, running the bot directly through `tsx` — no Docker, no build step. Deploys are triggered automatically by GitHub Actions on every push to `main`.
+Production runs on a single Hetzner Cloud VPS (CX22/CX23, Ubuntu 24.04) via `pm2`, running the bot directly through `tsx` — no Docker, no build step. Deploys are triggered automatically by GitHub Actions on every push to `master`.
 
 ### Architecture
 
@@ -264,7 +264,7 @@ VPS — deploy user, /opt/app (git checkout of this repo)
 pm2 → whatsapp-bot (tsx src/index.ts, cwd = packages/bot)
 ```
 
-`/opt/app` is a plain `git` checkout, always reset to `origin/main`. Everything the bot needs that must survive a deploy — `.env`, `packages/bot/auth_sessions/`, `packages/bot/data/` — is already `.gitignore`d, so `git reset --hard` never touches it. Nothing else lives on the box; no manual edits inside `/opt/app`, ever — they'd be wiped on the next deploy.
+`/opt/app` is a plain `git` checkout, always reset to `origin/master`. Everything the bot needs that must survive a deploy — `.env`, `packages/bot/auth_sessions/`, `packages/bot/data/` — is already `.gitignore`d, so `git reset --hard` never touches it. Nothing else lives on the box; no manual edits inside `/opt/app`, ever — they'd be wiped on the next deploy.
 
 pm2 still manages a single process (`whatsapp-bot`): the bot itself opens one Baileys socket per name listed in `WHATSAPP_SESSIONS`, so both users' sessions run inside that one process rather than as separate pm2 apps.
 
@@ -322,9 +322,9 @@ Then link WhatsApp for each user: `pm2 logs whatsapp-bot` prints one QR code per
 
 ### 3. Ongoing deploys (automatic)
 
-Every push to `main` runs `.github/workflows/deploy.yml`, which SSHes in (GitHub Actions → VPS key) and runs `scripts/deploy.sh` on the box:
+Every push to `master` runs `.github/workflows/deploy.yml`, which SSHes in (GitHub Actions → VPS key) and runs `scripts/deploy.sh` on the box:
 
-1. `git fetch` + `git reset --hard origin/main`
+1. `git fetch` + `git reset --hard origin/master`
 2. `npm install --workspace=packages/bot` (skips `packages/web` — faster, and the VPS doesn't need it)
 3. `npm run db:migrate --workspace=packages/bot` (idempotent — safe to run even with no pending migrations)
 4. `pm2 restart whatsapp-bot` (a full **restart**, not `reload` — `reload` is meant for stateless zero-downtime apps; a WhatsApp socket's connection state should not straddle two processes)
