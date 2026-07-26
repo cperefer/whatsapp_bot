@@ -7,6 +7,7 @@ import {
 import type { Boom } from "@hapi/boom";
 import qrcode from "qrcode-terminal";
 import { registerMessageHandlers } from "./handlers.js";
+import { logger } from "../logger.js";
 
 // Each user gets their own linked device (own auth folder), so each has an
 // independent WhatsApp session paired to their own account instead of all
@@ -28,13 +29,13 @@ export async function startWhatsAppClient(sessionName: string): Promise<void> {
     }
 
     if (connection === "open") {
-      console.log(`[whatsapp:${sessionName}] connected`);
+      logger.info(`[whatsapp:${sessionName}] connected`);
     }
 
     if (connection === "close") {
       const statusCode = (lastDisconnect?.error as Boom | undefined)?.output?.statusCode;
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-      console.log(
+      logger.warn(
         `[whatsapp:${sessionName}] connection closed (status ${statusCode ?? "unknown"}), ${shouldReconnect ? "reconnecting" : "logged out"}`,
       );
       if (shouldReconnect) {

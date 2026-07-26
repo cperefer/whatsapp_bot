@@ -60,6 +60,7 @@ whatsapp-agent/
 │   │   └── src/
 │   │       ├── index.ts          # entry point — starts one WhatsApp client per session
 │   │       ├── config.ts         # typed and validated env vars
+│   │       ├── logger.ts         # logger (debug is silenced when NODE_ENV=production) + redactPhone()
 │   │       │
 │   │       ├── whatsapp/
 │   │       │   ├── client.ts     # Baileys connection, QR, session (one instance per user)
@@ -192,6 +193,7 @@ When the user asks to retrieve the shopping list, assume they want to read it.
 - Imports must include `.js` extension (required by ESM + TypeScript)
 - Env vars: always typed and validated in `config.ts`, never use `process.env.X` inline
 - No `any`. Use `unknown` and type narrowing instead
+- Logging: use `logger` from `logger.ts`, never `console.*` directly. `logger.debug()` is the per-message play-by-play (received/processing/replied...) and is a no-op when `NODE_ENV=production`; `info/warn/error` always print. Wrap any phone number with `redactPhone()` before it reaches a log line that isn't `debug`
 
 ---
 
@@ -226,7 +228,7 @@ DB_PATH=./data/app.db
 
 - `auth_sessions/` and `.env` always in `.gitignore`
 - Validate `ALLOWED_PHONES` on every incoming message before processing — the bot silently ignores any unauthorized number
-- Do not log message content in production
+- Do not log message content, ever. Do not log raw phone numbers in production — `logger.debug()` (dev-only) may show them for debugging, anything logged at `info`/`warn`/`error` must go through `redactPhone()` first (see `logger.ts`)
 - Every user has their own linked WhatsApp session (own auth folder, own phone). Do not merge sessions or route one user's messages through another's socket — that's what keeps each person's own chat private
 
 ---
@@ -262,7 +264,11 @@ VPS — deploy user, /opt/app (git checkout of this repo)
 pm2 → whatsapp-bot (tsx src/index.ts, cwd = packages/bot)
 ```
 
-`/opt/app` is a plain `git` checkout, always reset to `origin/main`. Everything the bot needs that must survive a deploy — `.env`, `packages/bot/auth_session/`, `packages/bot/data/` — is already `.gitignore`d, so `git reset --hard` never touches it. Nothing else lives on the box; no manual edits inside `/opt/app`, ever — they'd be wiped on the next deploy.
+`/opt/app` is a plain `git` checkout, always reset to `origin/main`. Everything the bot needs that must survive a deploy — `.env`, `packages/bot/auth_sessions/`, `packages/bot/data/` — is already `.gitignore`d, so `git reset --hard` never touches it. Nothing else lives on the box; no manual edits inside `/opt/app`, ever — they'd be wiped on the next deploy.
+
+pm2 still manages a single process (`whatsapp-bot`): the bot itself opens one Baileys socket per name listed in `WHATSAPP_SESSIONS`, so both users' sessions run inside that one process rather than as separate pm2 apps.
+
+`ecosystem.config.cjs` sets `NODE_ENV=production`, which is what makes `logger.debug()` calls (see Code conventions) go silent — production logs stay down to connection events and errors, with any phone number redacted, instead of a line per message.
 
 ### Two SSH keys, two directions
 
@@ -302,7 +308,8 @@ The firewall opens SSH only. If the PWA (`packages/web`) is ever served from thi
 ssh deploy@<vps-ip>
 git clone git@github.com:cperefer/whatsapp_bot.git /opt/app
 cd /opt/app
-# copy .env from your machine — never through git:
+# copy .env from your machine — never through git. Make sure WHATSAPP_SESSIONS
+# lists every user (e.g. "Miguel,Alicia") before starting the process:
 #   scp .env deploy@<vps-ip>:/opt/app/.env
 npm install --workspace=packages/bot
 npm run db:migrate --workspace=packages/bot
@@ -311,7 +318,7 @@ pm2 save
 pm2 startup systemd -u deploy --hp /home/deploy   # run the sudo command it prints
 ```
 
-Then link WhatsApp once: `pm2 logs whatsapp-bot` to see the QR, scan it from WhatsApp → Linked devices. The session is saved under `packages/bot/auth_session/` and persists across every future deploy and reboot.
+Then link WhatsApp for each user: `pm2 logs whatsapp-bot` prints one QR code per name in `WHATSAPP_SESSIONS`, labeled `[whatsapp:<name>]`. Each person scans their own from their own phone (WhatsApp → Linked devices → Link a device). Each session is saved under `packages/bot/auth_sessions/<name>/` and persists across every future deploy and reboot — losing that folder means that one person has to re-scan, it does not affect the other session.
 
 ### 3. Ongoing deploys (automatic)
 
@@ -351,7 +358,7 @@ rm ./gh_deploy_key ./gh_deploy_key.pub
 ### 5. Persistence and resilience
 
 - **pm2 survives reboots**: `pm2 startup` (run once during first deploy) installs a systemd unit that resurrects `pm2 save`'d processes on boot. Re-run `pm2 save` any time the process list changes.
-- **Session and DB never touch git**: `packages/bot/auth_session/` and `packages/bot/data/` are `.gitignore`d; `git reset --hard` in `deploy.sh` cannot delete them.
+- **Sessions and DB never touch git**: `packages/bot/auth_sessions/` (one subfolder per user) and `packages/bot/data/` are `.gitignore`d; `git reset --hard` in `deploy.sh` cannot delete them.
 - **Backups**: `scripts/backup-db.sh` takes a consistent `sqlite3 .backup` snapshot (safe under WAL mode, unlike a raw `cp`) and uploads it to Backblaze B2 via `rclone`. One-time setup: install `rclone`, run `rclone config` to add a `b2` remote, edit `B2_REMOTE` in the script, then set a lifecycle rule on the B2 bucket to auto-expire old backups instead of scripting retention. Schedule it as the `deploy` user:
   ```bash
   crontab -e

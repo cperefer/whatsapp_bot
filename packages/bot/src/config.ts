@@ -23,4 +23,5 @@ export const config = {
     .split(",")
     .map((session) => session.trim()),
   dbPath: process.env.DB_PATH ?? "./data/app.db",
+  isProduction: process.env.NODE_ENV === "production",
 } as const;
