@@ -11,6 +11,30 @@ function formatTranscription(text: string): string {
   return `🎙️ _Transcripción del audio reenviado:_\n${text}`;
 }
 
+// WhatsApp auto-expires the "escribiendo..." indicator after a short while, so
+// a slow agent call (multi-turn tool use, long messages) would show it dropping
+// mid-processing. Re-sending "composing" on an interval keeps it up for as long
+// as the wrapped promise takes; the interval is always cleared in `finally`.
+const COMPOSING_REFRESH_MS = 8_000;
+
+async function withComposingIndicator<T>(
+  socket: WASocket,
+  remoteJid: string,
+  work: () => Promise<T>,
+): Promise<T> {
+  await socket.sendPresenceUpdate("composing", remoteJid);
+  const interval = setInterval(() => {
+    socket.sendPresenceUpdate("composing", remoteJid).catch(() => {});
+  }, COMPOSING_REFRESH_MS);
+
+  try {
+    return await work();
+  } finally {
+    clearInterval(interval);
+    await socket.sendPresenceUpdate("paused", remoteJid).catch(() => {});
+  }
+}
+
 // WhatsApp drops the _italic_ markers if they span a blank line, so a single
 // _.../_ wrapper around a multi-paragraph reply renders as literal underscores.
 // Instead we italicize line by line, keeping any leading emoji (e.g. a
@@ -122,7 +146,9 @@ export function registerMessageHandlers(socket: WASocket, sessionName: string): 
         );
 
         if (audioMessage && isForwarded) {
-          const transcription = await transcribeAudio(audioMessage);
+          const transcription = await withComposingIndicator(socket, remoteJid, () =>
+            transcribeAudio(audioMessage),
+          );
           if (!transcription) {
             logger.debug(`[whatsapp:${sessionName}] forwarded audio from ${phone} could not be transcribed, skipping`);
             continue;
@@ -135,19 +161,20 @@ export function registerMessageHandlers(socket: WASocket, sessionName: string): 
           continue;
         }
 
-        const userMessage = audioMessage
-          ? await transcribeAudio(audioMessage)
-          : text;
+        const reply = await withComposingIndicator(socket, remoteJid, async () => {
+          const userMessage = audioMessage ? await transcribeAudio(audioMessage) : text;
+          if (!userMessage) return null;
 
-        if (!userMessage) {
+          logger.debug(`[whatsapp:${sessionName}] processing message from ${phone}`);
+          const userName = message.pushName ?? phone;
+          const userId = await getOrCreateUser(phone, userName);
+          return runAgent(userMessage, userId, userName);
+        });
+
+        if (reply === null) {
           logger.debug(`[whatsapp:${sessionName}] message from ${phone} had no readable text/audio, skipping`);
           continue;
         }
-
-        logger.debug(`[whatsapp:${sessionName}] processing message from ${phone}`);
-        const userName = message.pushName ?? phone;
-        const userId = await getOrCreateUser(phone, userName);
-        const reply = await runAgent(userMessage, userId, userName);
 
         if (reply) {
           const formattedReply = formatBotReply(reply);
