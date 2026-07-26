@@ -236,6 +236,125 @@ DB_PATH=./data/app.db
 
 ---
 
+## Deployment
+
+Production runs on a single Hetzner Cloud VPS (CX22/CX23, Ubuntu 24.04) via `pm2`, running the bot directly through `tsx` — no Docker, no build step. Deploys are triggered automatically by GitHub Actions on every push to `main`.
+
+### Architecture
+
+```
+GitHub (main branch)
+   │  push
+   ▼
+GitHub Actions (.github/workflows/deploy.yml)
+   │  ssh (appleboy/ssh-action, key: SSH_PRIVATE_KEY secret)
+   ▼
+VPS — deploy user, /opt/app (git checkout of this repo)
+   │  scripts/deploy.sh: git reset --hard → npm install (bot workspace) →
+   │                      drizzle migrate → pm2 restart → status check
+   ▼
+pm2 → whatsapp-bot (tsx src/index.ts, cwd = packages/bot)
+```
+
+`/opt/app` is a plain `git` checkout, always reset to `origin/main`. Everything the bot needs that must survive a deploy — `.env`, `packages/bot/auth_session/`, `packages/bot/data/` — is already `.gitignore`d, so `git reset --hard` never touches it. Nothing else lives on the box; no manual edits inside `/opt/app`, ever — they'd be wiped on the next deploy.
+
+### Two SSH keys, two directions
+
+Deploys need SSH in both directions and they must **not** share a key:
+
+| Direction              | Purpose                          | Key lives                                                          |
+| ----------------------- | --------------------------------- | -------------------------------------------------------------------- |
+| GitHub Actions → VPS   | let CI log in and run `deploy.sh` | private half in the `SSH_PRIVATE_KEY` GitHub secret; public half in `~deploy/.ssh/authorized_keys` on the VPS |
+| VPS → GitHub            | let `git fetch` pull a private repo | private half stays only on the VPS (`~deploy/.ssh/id_ed25519`); public half added as a **read-only Deploy Key** on the GitHub repo (Settings → Deploy keys) |
+
+Never reuse a personal SSH key for either of these — both are scoped, disposable, and revocable independently of Miguel's own access.
+
+### 1. Provisioning the VPS (once)
+
+`scripts/provision-vps.sh` sets up a fresh Ubuntu 24.04 box: Node.js LTS, `pm2`, `git`, build tools for `better-sqlite3` (native module), the `sqlite3` CLI (used by backups), a non-root `deploy` user, `ufw` (SSH only), and `fail2ban` on `sshd`.
+
+```bash
+scp scripts/provision-vps.sh root@<vps-ip>:/root/
+ssh root@<vps-ip> 'bash /root/provision-vps.sh'
+```
+
+After it runs:
+
+1. Paste your personal public key into `/home/deploy/.ssh/authorized_keys` (if not already there).
+2. Harden SSH: in `/etc/ssh/sshd_config` set `PermitRootLogin no` and `PasswordAuthentication no`, then `systemctl restart ssh` — **only after confirming key-based login as `deploy` works**, or you'll lock yourself out.
+3. As `deploy`, generate the VPS→GitHub deploy key and register it (read-only) on the repo:
+   ```bash
+   ssh-keygen -t ed25519 -C "vps-deploy-key" -f ~/.ssh/id_ed25519 -N ""
+   cat ~/.ssh/id_ed25519.pub   # add under GitHub repo → Settings → Deploy keys (read-only)
+   ```
+
+The firewall opens SSH only. If the PWA (`packages/web`) is ever served from this same box, open 80/443 then and put a reverse proxy in front — out of scope for now.
+
+### 2. First deploy (manual, one time)
+
+```bash
+ssh deploy@<vps-ip>
+git clone git@github.com:cperefer/whatsapp_bot.git /opt/app
+cd /opt/app
+# copy .env from your machine — never through git:
+#   scp .env deploy@<vps-ip>:/opt/app/.env
+npm install --workspace=packages/bot
+npm run db:migrate --workspace=packages/bot
+pm2 start packages/bot/ecosystem.config.cjs
+pm2 save
+pm2 startup systemd -u deploy --hp /home/deploy   # run the sudo command it prints
+```
+
+Then link WhatsApp once: `pm2 logs whatsapp-bot` to see the QR, scan it from WhatsApp → Linked devices. The session is saved under `packages/bot/auth_session/` and persists across every future deploy and reboot.
+
+### 3. Ongoing deploys (automatic)
+
+Every push to `main` runs `.github/workflows/deploy.yml`, which SSHes in (GitHub Actions → VPS key) and runs `scripts/deploy.sh` on the box:
+
+1. `git fetch` + `git reset --hard origin/main`
+2. `npm install --workspace=packages/bot` (skips `packages/web` — faster, and the VPS doesn't need it)
+3. `npm run db:migrate --workspace=packages/bot` (idempotent — safe to run even with no pending migrations)
+4. `pm2 restart whatsapp-bot` (a full **restart**, not `reload` — `reload` is meant for stateless zero-downtime apps; a WhatsApp socket's connection state should not straddle two processes)
+5. `pm2 save`, then an explicit `pm2 jlist` status check
+
+`set -euo pipefail` plus that final status check means any failed step — a bad migration, a crash on boot — fails the GitHub Actions run loudly instead of leaving a half-deployed bot. On failure, check the Action logs (last 50 `pm2 logs` lines are printed automatically) or SSH in and run `pm2 logs whatsapp-bot`.
+
+### 4. GitHub secrets
+
+Set these under repo Settings → Secrets and variables → Actions:
+
+| Secret            | Value                                                              |
+| ------------------ | -------------------------------------------------------------------- |
+| `SSH_HOST`         | VPS IP or hostname                                                  |
+| `SSH_USER`         | `deploy`                                                             |
+| `SSH_PRIVATE_KEY`  | private half of the **dedicated** GitHub Actions deploy key (below) |
+
+Generate the CI key locally (do this on your own machine, not the VPS):
+
+```bash
+ssh-keygen -t ed25519 -C "github-actions-deploy" -f ./gh_deploy_key -N ""
+# public half → append to /home/deploy/.ssh/authorized_keys on the VPS
+# private half → paste the full file (including header/footer lines) into the
+#                SSH_PRIVATE_KEY secret, then delete the local copy
+gh secret set SSH_PRIVATE_KEY < ./gh_deploy_key
+gh secret set SSH_HOST --body "<vps-ip>"
+gh secret set SSH_USER --body "deploy"
+rm ./gh_deploy_key ./gh_deploy_key.pub
+```
+
+### 5. Persistence and resilience
+
+- **pm2 survives reboots**: `pm2 startup` (run once during first deploy) installs a systemd unit that resurrects `pm2 save`'d processes on boot. Re-run `pm2 save` any time the process list changes.
+- **Session and DB never touch git**: `packages/bot/auth_session/` and `packages/bot/data/` are `.gitignore`d; `git reset --hard` in `deploy.sh` cannot delete them.
+- **Backups**: `scripts/backup-db.sh` takes a consistent `sqlite3 .backup` snapshot (safe under WAL mode, unlike a raw `cp`) and uploads it to Backblaze B2 via `rclone`. One-time setup: install `rclone`, run `rclone config` to add a `b2` remote, edit `B2_REMOTE` in the script, then set a lifecycle rule on the B2 bucket to auto-expire old backups instead of scripting retention. Schedule it as the `deploy` user:
+  ```bash
+  crontab -e
+  # 0 3 * * * /opt/app/scripts/backup-db.sh >> /opt/backups/backup.log 2>&1
+  ```
+- **Healthcheck**: `pm2 autorestart` (set in `ecosystem.config.cjs`) already restarts the process on crash. To check on it manually: `pm2 status` (should show `whatsapp-bot` as `online`) and `pm2 logs whatsapp-bot`. Optional: `pm2 install pm2-logrotate` so logs don't fill the disk over time.
+
+---
+
 ## Roadmap
 
 **MVP**
