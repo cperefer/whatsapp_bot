@@ -10,6 +10,7 @@
     "bot": "npm run dev --workspace=packages/bot",
     "web": "npm run dev --workspace=packages/web",
     "db:generate": "npm run db:generate --workspace=packages/bot",
-    "db:migrate": "npm run db:migrate --workspace=packages/bot"
+    "db:migrate": "npm run db:migrate --workspace=packages/bot",
+    "eval": "npm run eval --workspace=packages/bot"
   }
 }
