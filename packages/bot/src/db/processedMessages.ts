@@ -26,13 +26,16 @@ export async function markMessageProcessed(sessionName: string, messageId: strin
 }
 
 async function pruneOldMessages(sessionName: string): Promise<void> {
-  const stale = await db
+  // SQLite rejects a bare OFFSET without LIMIT, so the cutoff is applied in
+  // JS instead — the row count per session is capped at MAX_TRACKED_MESSAGE_IDS
+  // anyway, so fetching all ids here stays cheap.
+  const rows = await db
     .select({ id: processedMessages.id })
     .from(processedMessages)
     .where(eq(processedMessages.sessionName, sessionName))
     .orderBy(desc(processedMessages.id))
-    .offset(MAX_TRACKED_MESSAGE_IDS)
     .all();
+  const stale = rows.slice(MAX_TRACKED_MESSAGE_IDS);
   if (stale.length === 0) return;
 
   await db
