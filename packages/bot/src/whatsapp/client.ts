@@ -39,7 +39,9 @@ export async function startWhatsAppClient(sessionName: string): Promise<void> {
         `[whatsapp:${sessionName}] connection closed (status ${statusCode ?? "unknown"}), ${shouldReconnect ? "reconnecting" : "logged out"}`,
       );
       if (shouldReconnect) {
-        void startWhatsAppClient(sessionName);
+        startWhatsAppClient(sessionName).catch((error) => {
+          logger.error(`[whatsapp:${sessionName}] failed to reconnect:`, error);
+        });
       }
     }
   });

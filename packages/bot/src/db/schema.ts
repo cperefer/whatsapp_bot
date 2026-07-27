@@ -1,4 +1,4 @@
-import { sqliteTable, integer, text, real } from "drizzle-orm/sqlite-core";
+import { sqliteTable, integer, text, real, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const users = sqliteTable("users", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -51,3 +51,24 @@ export const crossfitPrs = sqliteTable("crossfit_prs", {
   result: real("result").notNull(),
   unit: text("unit").notNull(),
 });
+
+// Tracks inbound WhatsApp message ids already handled by the agent, keyed per
+// session. Persisted (rather than an in-memory Set) so a process restart
+// doesn't forget what it already replied to — Baileys can redeliver the last
+// message via messages.upsert on reconnect, and without this the bot would
+// process and reply to it again.
+export const processedMessages = sqliteTable(
+  "processed_messages",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    sessionName: text("session_name").notNull(),
+    messageId: text("message_id").notNull(),
+    processedAt: integer("processed_at").notNull(),
+  },
+  (table) => ({
+    sessionMessageUnique: uniqueIndex("processed_messages_session_message_unique").on(
+      table.sessionName,
+      table.messageId,
+    ),
+  }),
+);

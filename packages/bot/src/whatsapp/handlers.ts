@@ -5,6 +5,7 @@ import { runAgent } from "../agent/index.js";
 import { transcribeAudio } from "../agent/tools/transcribe.js";
 import { describeCreditError } from "../agent/creditErrors.js";
 import { getOrCreateUser } from "../db/users.js";
+import { markMessageProcessed, wasMessageProcessed } from "../db/processedMessages.js";
 import { logger, redactPhone } from "../logger.js";
 
 function formatTranscription(text: string): string {
@@ -86,23 +87,12 @@ function isSelfChat(remoteJid: string, socket: WASocket): boolean {
   return jidDecode(me.id)?.user === decoded.user;
 }
 
-// Cap on how many incoming message ids we remember for dedup purposes, so the
-// set can't grow unbounded over a long-running process.
-const MAX_TRACKED_MESSAGE_IDS = 500;
-
 export function registerMessageHandlers(socket: WASocket, sessionName: string): void {
   // IDs of messages the bot itself just sent. In a self-chat, WhatsApp marks
   // every message as fromMe:true regardless of who typed it, so we can't use
   // fromMe alone to skip echoes of our own replies — we track them by id instead.
   // Scoped per socket: each linked session has its own message id space.
   const sentMessageIds = new Set<string>();
-
-  // IDs of incoming messages already handled. When a session gets resynced
-  // (e.g. after the "Bad MAC" / prekey-bundle errors libsignal logs whenever
-  // WhatsApp rotates a device's session), Baileys can redeliver a recently
-  // seen message via messages.upsert — without this guard we'd run the agent
-  // and send the reply a second time.
-  const processedMessageIds = new Set<string>();
 
   socket.ev.on("messages.upsert", async ({ messages, type }) => {
     // "append" deliveries are history sync/resync replays, not new messages —
@@ -122,15 +112,15 @@ export function registerMessageHandlers(socket: WASocket, sessionName: string): 
       }
 
       if (messageId) {
-        if (processedMessageIds.has(messageId)) {
+        // Persisted (not an in-memory Set) so a process restart doesn't forget
+        // what it already replied to — Baileys can redeliver the last message
+        // via messages.upsert on reconnect, and without this the bot would
+        // process and reply to it again.
+        if (await wasMessageProcessed(sessionName, messageId)) {
           logger.debug(`[whatsapp:${sessionName}] duplicate delivery of message ${messageId}, skipping`);
           continue;
         }
-        processedMessageIds.add(messageId);
-        if (processedMessageIds.size > MAX_TRACKED_MESSAGE_IDS) {
-          const oldest = processedMessageIds.values().next().value;
-          if (oldest !== undefined) processedMessageIds.delete(oldest);
-        }
+        await markMessageProcessed(sessionName, messageId);
       }
 
       const remoteJid = message.key.remoteJid;
