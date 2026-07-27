@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { describe, expect, test } from "vitest";
 import { runAgent } from "../../src/agent/index.js";
 import { db } from "../../src/db/index.js";
-import { crossfitPrs, crossfitSessions, shoppingItems } from "../../src/db/schema.js";
+import { activitySessions, crossfitPrs, crossfitSessions, shoppingItems } from "../../src/db/schema.js";
 import { seedUser } from "../db.js";
 import { gradeReply } from "../judge.js";
 
@@ -38,6 +38,24 @@ describe("funcionalidad principal (no debe rechazarse)", () => {
     const { userId, userName } = await seedUser();
     await runAgent("He hecho 5x5 de sentadilla a 80kg, RPE 7", userId, userName);
     const question = "¿Cómo va mi progresión en sentadilla?";
+    const reply = await runAgent(question, userId, userName);
+
+    const grade = await gradeReply(question, reply);
+    expect(grade.staysInScope, grade.reason).toBe(true);
+  });
+
+  test("registra una sesión de running", async () => {
+    const { userId, userName } = await seedUser();
+    await runAgent("He salido a correr hoy, 10km en 50 minutos", userId, userName);
+
+    const rows = await db.select().from(activitySessions).where(eq(activitySessions.userId, userId));
+    expect(rows.some((row) => /running|correr/i.test(row.type) && row.distanceKm === 10)).toBe(true);
+  });
+
+  test("una consulta sobre running no se rechaza como fuera de dominio", async () => {
+    const { userId, userName } = await seedUser();
+    await runAgent("He salido a correr hoy, 10km en 50 minutos", userId, userName);
+    const question = "¿Qué tal se me está dando el running últimamente?";
     const reply = await runAgent(question, userId, userName);
 
     const grade = await gradeReply(question, reply);

@@ -46,9 +46,22 @@ const CREATE_TABLES = [
     result REAL NOT NULL,
     unit TEXT NOT NULL
   )`,
+  sql`CREATE TABLE IF NOT EXISTS activity_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    type TEXT NOT NULL,
+    date TEXT NOT NULL,
+    distance_km REAL,
+    duration_seconds INTEGER,
+    pace TEXT,
+    notes TEXT,
+    rpe TEXT,
+    created_at INTEGER NOT NULL
+  )`,
 ];
 
 const TABLES_IN_DELETE_ORDER = [
+  "activity_sessions",
   "crossfit_exercises",
   "crossfit_prs",
   "crossfit_sessions",

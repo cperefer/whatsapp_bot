@@ -52,6 +52,24 @@ export const crossfitPrs = sqliteTable("crossfit_prs", {
   unit: text("unit").notNull(),
 });
 
+// Cardio/other-sport sessions (running, cycling, swimming, hiking...) — kept
+// separate from crossfit_sessions because the shape is different (distance/
+// pace/duration vs. sets/reps/weight per exercise).
+export const activitySessions = sqliteTable("activity_sessions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
+  type: text("type").notNull(),
+  date: text("date").notNull(),
+  distanceKm: real("distance_km"),
+  durationSeconds: integer("duration_seconds"),
+  pace: text("pace"),
+  notes: text("notes"),
+  rpe: text("rpe"),
+  createdAt: integer("created_at").notNull(),
+});
+
 // Tracks inbound WhatsApp message ids already handled by the agent, keyed per
 // session. Persisted (rather than an in-memory Set) so a process restart
 // doesn't forget what it already replied to — Baileys can redeliver the last

@@ -16,7 +16,7 @@ const OFF_DOMAIN_MESSAGES = [
   "¿Quién ganó las elecciones ayer?",
 ];
 
-describe("domain boundary: temas fuera de compra/crossfit", () => {
+describe("domain boundary: temas fuera de compra/entrenamiento", () => {
   test.each(OFF_DOMAIN_MESSAGES)("declina educadamente: %s", async (message) => {
     const { userId, userName } = await seedUser();
     const reply = await runAgent(message, userId, userName);

@@ -15,6 +15,13 @@
       "when": 1785133562343,
       "tag": "0001_far_jasper_sitwell",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1785170419759,
+      "tag": "0002_open_apocalypse",
+      "breakpoints": true
     }
   ]
 }

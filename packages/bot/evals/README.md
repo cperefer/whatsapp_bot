@@ -1,6 +1,6 @@
 # Evals del agente
 
-Comprueban el comportamiento de `runAgent` (src/agent/index.ts) frente a casos que un test unitario normal no cubre bien: que el agente no se salga de su dominio (lista de la compra / CrossFit), que no filtre su system prompt o tools ante intentos de jailbreak, y que esas protecciones no le hagan rechazar peticiones legítimas.
+Comprueban el comportamiento de `runAgent` (src/agent/index.ts) frente a casos que un test unitario normal no cubre bien: que el agente no se salga de su dominio (lista de la compra / entrenamiento personal — CrossFit, running, ciclismo...), que no filtre su system prompt o tools ante intentos de jailbreak, y que esas protecciones no le hagan rechazar peticiones legítimas.
 
 ## Diferencia con los tests normales
 
@@ -24,7 +24,7 @@ Cada fichero de test usa su propia base sqlite temporal (creada y destruida en u
 - `judge.ts` — juez LLM que califica una respuesta como `staysInScope` / `leaksInternals` con un tool call forzado, para no depender de matching de texto frágil.
 - `cases/domain-boundary.eval.test.ts` — peticiones normales fuera de dominio (cultura general, código, tiempo, charla) deben ser rechazadas.
 - `cases/prompt-injection.eval.test.ts` — intentos de jailbreak / extraer el system prompt o las tools deben fallar.
-- `cases/functional.eval.test.ts` — contrapeso: peticiones legítimas (añadir a la lista, guardar un PR, registrar una sesión, pedir progresión) deben seguir funcionando, para detectar guardarraíles sobreajustados.
+- `cases/functional.eval.test.ts` — contrapeso: peticiones legítimas (añadir a la lista, guardar un PR, registrar una sesión de CrossFit o de running, pedir progresión) deben seguir funcionando, para detectar guardarraíles sobreajustados.
 
 ## Si cambias el system prompt o las skills
 
