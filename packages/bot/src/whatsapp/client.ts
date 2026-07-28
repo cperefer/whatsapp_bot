@@ -9,6 +9,9 @@ import qrcode from "qrcode-terminal";
 import { registerMessageHandlers } from "./handlers.js";
 import { logger } from "../logger.js";
 
+const MAX_RECONNECT_DELAY_MS = 60_000;
+const reconnectAttempts = new Map<string, number>();
+
 // Each user gets their own linked device (own auth folder), so each has an
 // independent WhatsApp session paired to their own account instead of all
 // of them sharing a single number.
@@ -33,20 +36,36 @@ export async function startWhatsAppClient(sessionName: string): Promise<void> {
     }
 
     if (connection === "open") {
+      reconnectAttempts.delete(sessionName);
       logger.info(`[whatsapp:${sessionName}] connected`);
     }
 
     if (connection === "close") {
       const statusCode = (lastDisconnect?.error as Boom | undefined)?.output?.statusCode;
-      const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+      // loggedOut: the device was unlinked from the phone. forbidden: WhatsApp
+      // rejected the account (e.g. banned). Retrying either just hammers a
+      // dead session, which looks like abusive/bot behavior to WhatsApp.
+      const shouldReconnect =
+        statusCode !== DisconnectReason.loggedOut && statusCode !== DisconnectReason.forbidden;
+
+      if (!shouldReconnect) {
+        reconnectAttempts.delete(sessionName);
+        logger.warn(`[whatsapp:${sessionName}] connection closed (status ${statusCode ?? "unknown"}), not reconnecting`);
+        return;
+      }
+
+      const attempt = (reconnectAttempts.get(sessionName) ?? 0) + 1;
+      reconnectAttempts.set(sessionName, attempt);
+      const delayMs = Math.min(1000 * 2 ** (attempt - 1), MAX_RECONNECT_DELAY_MS);
+
       logger.warn(
-        `[whatsapp:${sessionName}] connection closed (status ${statusCode ?? "unknown"}), ${shouldReconnect ? "reconnecting" : "logged out"}`,
+        `[whatsapp:${sessionName}] connection closed (status ${statusCode ?? "unknown"}), reconnecting in ${delayMs}ms (attempt ${attempt})`,
       );
-      if (shouldReconnect) {
+      setTimeout(() => {
         startWhatsAppClient(sessionName).catch((error) => {
           logger.error(`[whatsapp:${sessionName}] failed to reconnect:`, error);
         });
-      }
+      }, delayMs);
     }
   });
 
