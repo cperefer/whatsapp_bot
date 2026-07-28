@@ -16,7 +16,11 @@ export async function startWhatsAppClient(sessionName: string): Promise<void> {
   const { state, saveCreds } = await useMultiFileAuthState(`auth_sessions/${sessionName}`);
   const { version } = await fetchLatestBaileysVersion();
 
-  const socket = makeWASocket({ auth: state, version });
+  // Baileys defaults to markOnlineOnConnect: true, which broadcasts an
+  // "available" presence the moment the socket connects. Since this bot
+  // stays connected indefinitely, that made the linked account (and the
+  // partner's chat with it) show as permanently online in WhatsApp.
+  const socket = makeWASocket({ auth: state, version, markOnlineOnConnect: false });
 
   socket.ev.on("creds.update", saveCreds);
 
