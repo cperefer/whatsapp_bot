@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import Anthropic from "@anthropic-ai/sdk";
 import { config } from "../config.js";
+import { appendConversationTurn, getConversationHistory } from "../db/conversationMessages.js";
 import { activityTools, executeActivityTool, isActivityTool } from "./tools/activity.js";
 import { crossfitTools, executeCrossfitTool, isCrossfitTool } from "./tools/crossfit.js";
 import { executeShoppingTool, isShoppingTool, shoppingTools } from "./tools/shopping.js";
@@ -68,8 +69,33 @@ const MAX_TOOL_ITERATIONS = 5;
 
 export async function runAgent(userMessage: string, userId: number, userName: string): Promise<string> {
   const system = await buildSystemPrompt(userName);
-  const messages: Anthropic.MessageParam[] = [{ role: "user", content: userMessage }];
 
+  // Recent turns from earlier WhatsApp messages (same idle-bounded session),
+  // replayed so the agent has context — e.g. RMs or exercises given a few
+  // messages ago that a later message (RPEs, weights used) refers back to
+  // without repeating.
+  const history = await getConversationHistory(userId);
+  const messages: Anthropic.MessageParam[] = [
+    ...history.map((turn): Anthropic.MessageParam => ({ role: turn.role, content: turn.content })),
+    { role: "user", content: userMessage },
+  ];
+
+  const reply = await converse(system, messages, userId);
+
+  // Persisted only once the full exchange succeeded, so a failed API call
+  // doesn't leave an unanswered user turn that would break the strict
+  // user/assistant alternation the Messages API expects on the next call.
+  await appendConversationTurn(userId, "user", userMessage);
+  await appendConversationTurn(userId, "assistant", reply);
+
+  return reply;
+}
+
+async function converse(
+  system: string,
+  messages: Anthropic.MessageParam[],
+  userId: number,
+): Promise<string> {
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
     const response = await client.messages.create({
       model: "claude-sonnet-4-6",

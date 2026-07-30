@@ -70,6 +70,21 @@ export const activitySessions = sqliteTable("activity_sessions", {
   createdAt: integer("created_at").notNull(),
 });
 
+// Raw conversation turns (user message text / assistant reply text, not the
+// intermediate tool_use/tool_result exchanges within a turn) used to give the
+// agent short-term memory across separate WhatsApp messages. See
+// conversationMessages.ts for the idle-window logic that decides how much of
+// this to replay on the next message.
+export const conversationMessages = sqliteTable("conversation_messages", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
+  role: text("role").notNull(),
+  content: text("content").notNull(),
+  createdAt: integer("created_at").notNull(),
+});
+
 // Tracks inbound WhatsApp message ids already handled by the agent, keyed per
 // session. Persisted (rather than an in-memory Set) so a process restart
 // doesn't forget what it already replied to — Baileys can redeliver the last

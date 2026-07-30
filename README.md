@@ -2,7 +2,7 @@
 
 Bot personal de WhatsApp conectado a agentes de IA (Claude) para uso estrictamente privado (2 usuarios). No es un producto comercial: sin SEO, sin usuarios externos, sin requisitos de escalado.
 
-Cada usuario vincula el bot como dispositivo adicional en su **propio** WhatsApp (su propio número, su propio self-chat) — no existe un único número de bot compartido. Ambas sesiones corren en el mismo proceso y comparten base de datos, así que la lista de la compra sigue siendo común mientras que los datos de CrossFit quedan aislados por usuario.
+Cada usuario vincula el bot como dispositivo adicional en su **propio** WhatsApp (su propio número, su propio self-chat) — no existe un único número de bot compartido. Ambas sesiones corren en el mismo proceso y comparten base de datos, así que la lista de la compra sigue siendo común mientras que los datos de entrenamiento quedan aislados por usuario.
 
 ## Funcionalidades (MVP)
 
