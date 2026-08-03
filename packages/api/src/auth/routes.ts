@@ -1,5 +1,4 @@
 import { Router } from "express";
-import { eq } from "drizzle-orm";
 import { users } from "../../../bot/src/db/schema.js";
 import type { ApiDeps } from "../app.js";
 import { createOtp, isRateLimited, verifyOtp } from "./otp.js";
@@ -12,6 +11,18 @@ function readString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+// Phones are stored with their country code (e.g. "34647675298"), but that
+// prefix isn't interesting for matching logins — compare by the last 9
+// digits so "647675298" and "+34 647 67 52 98" both match the same user.
+function last9Digits(phone: string): string {
+  return phone.slice(-9);
+}
+
+async function findUserByPhone(deps: ApiDeps, phone: string) {
+  const allUsers = await deps.db.select().from(users).all();
+  return allUsers.find((user) => last9Digits(user.phone) === last9Digits(phone));
+}
+
 export function createAuthRouter(deps: ApiDeps): Router {
   const router = Router();
 
@@ -20,12 +31,12 @@ export function createAuthRouter(deps: ApiDeps): Router {
 
     // Always answer 200 regardless of whether the phone is whitelisted/known,
     // so this endpoint can't be used to enumerate registered numbers.
-    if (!deps.allowedPhones.includes(phone)) {
+    if (!deps.allowedPhones.some((allowed) => last9Digits(allowed) === last9Digits(phone))) {
       res.status(200).json({ ok: true });
       return;
     }
 
-    const user = await deps.db.select().from(users).where(eq(users.phone, phone)).get();
+    const user = await findUserByPhone(deps, phone);
     if (!user) {
       res.status(200).json({ ok: true });
       return;
@@ -38,7 +49,7 @@ export function createAuthRouter(deps: ApiDeps): Router {
 
     const code = await createOtp(deps.db, user.id);
     const sent = await deps.sendSelfMessage(
-      phone,
+      user.phone,
       `🔐 Tu código de acceso al dashboard es *${code}*. Caduca en 5 minutos.`,
     );
     if (!sent) {
@@ -53,7 +64,7 @@ export function createAuthRouter(deps: ApiDeps): Router {
     const phone = readString(req.body?.phone);
     const code = readString(req.body?.code);
 
-    const user = await deps.db.select().from(users).where(eq(users.phone, phone)).get();
+    const user = await findUserByPhone(deps, phone);
     if (!user || !(await verifyOtp(deps.db, user.id, code))) {
       res.status(401).json({ error: "invalid_code" });
       return;

@@ -21,6 +21,19 @@ export async function listActivitySessions(
     .all();
 }
 
+export async function getActivitySession(
+  db: ApiDeps["db"],
+  userId: number,
+  sessionId: number,
+): Promise<typeof activitySessions.$inferSelect | null> {
+  const session = await db
+    .select()
+    .from(activitySessions)
+    .where(and(eq(activitySessions.id, sessionId), eq(activitySessions.userId, userId)))
+    .get();
+  return session ?? null;
+}
+
 export async function getActivityWeekSummary(
   db: ApiDeps["db"],
   userId: number,

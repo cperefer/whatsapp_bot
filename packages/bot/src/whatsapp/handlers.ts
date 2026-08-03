@@ -6,6 +6,7 @@ import { transcribeAudio } from "../agent/tools/transcribe.js";
 import { describeCreditError } from "../agent/creditErrors.js";
 import { getOrCreateUser } from "../db/users.js";
 import { markMessageProcessed, wasMessageProcessed } from "../db/processedMessages.js";
+import { markSentByUs, wasSentByUs } from "./sender.js";
 import { logger, redactPhone } from "../logger.js";
 
 function formatTranscription(text: string): string {
@@ -88,12 +89,6 @@ function isSelfChat(remoteJid: string, socket: WASocket): boolean {
 }
 
 export function registerMessageHandlers(socket: WASocket, sessionName: string): void {
-  // IDs of messages the bot itself just sent. In a self-chat, WhatsApp marks
-  // every message as fromMe:true regardless of who typed it, so we can't use
-  // fromMe alone to skip echoes of our own replies — we track them by id instead.
-  // Scoped per socket: each linked session has its own message id space.
-  const sentMessageIds = new Set<string>();
-
   socket.ev.on("messages.upsert", async ({ messages, type }) => {
     // "append" deliveries are history sync/resync replays, not new messages —
     // only "notify" is an actual incoming message.
@@ -106,8 +101,7 @@ export function registerMessageHandlers(socket: WASocket, sessionName: string): 
 
     for (const message of messages) {
       const messageId = message.key.id;
-      if (messageId && sentMessageIds.has(messageId)) {
-        sentMessageIds.delete(messageId);
+      if (messageId && wasSentByUs(sessionName, messageId)) {
         continue;
       }
 
@@ -164,7 +158,7 @@ export function registerMessageHandlers(socket: WASocket, sessionName: string): 
 
           const formattedTranscription = formatTranscription(transcription);
           const sent = await socket.sendMessage(remoteJid, { text: formattedTranscription });
-          if (sent?.key.id) sentMessageIds.add(sent.key.id);
+          if (sent?.key.id) markSentByUs(sessionName, sent.key.id);
           logger.debug(`[whatsapp:${sessionName}] sent transcription of forwarded audio to ${phone}`);
           continue;
         }
@@ -187,7 +181,7 @@ export function registerMessageHandlers(socket: WASocket, sessionName: string): 
         if (reply) {
           const formattedReply = formatBotReply(reply);
           const sent = await socket.sendMessage(remoteJid, { text: formattedReply });
-          if (sent?.key.id) sentMessageIds.add(sent.key.id);
+          if (sent?.key.id) markSentByUs(sessionName, sent.key.id);
           logger.debug(`[whatsapp:${sessionName}] replied to ${phone}`);
         } else {
           logger.warn(`[whatsapp:${sessionName}] agent returned no reply for ${redactPhone(phone)}`);
@@ -198,7 +192,7 @@ export function registerMessageHandlers(socket: WASocket, sessionName: string): 
         const creditWarning = describeCreditError(error);
         if (creditWarning) {
           const sent = await socket.sendMessage(remoteJid, { text: creditWarning });
-          if (sent?.key.id) sentMessageIds.add(sent.key.id);
+          if (sent?.key.id) markSentByUs(sessionName, sent.key.id);
         }
       }
     }
