@@ -73,7 +73,7 @@ export function createAuthRouter(deps: ApiDeps): Router {
     const session = await createSession(deps.db, user.id, req.headers["user-agent"]);
     res.cookie(SESSION_COOKIE, session.id, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: deps.cookieSecure ?? process.env.NODE_ENV === "production",
       sameSite: "lax",
       maxAge: SESSION_COOKIE_MAX_AGE_MS,
     });

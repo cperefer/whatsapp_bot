@@ -18,7 +18,12 @@ process.on("uncaughtException", (error) => {
 });
 
 const apiPort = Number(process.env.API_PORT ?? 3001);
-const app = createApp({ db, sendSelfMessage, allowedPhones: config.allowedPhones });
+const app = createApp({
+  db,
+  sendSelfMessage,
+  allowedPhones: config.allowedPhones,
+  cookieSecure: config.cookieSecure,
+});
 app.listen(apiPort, () => logger.info(`[api] listening on port ${apiPort}`));
 
 await Promise.all(config.whatsappSessions.map((sessionName) => startWhatsAppClient(sessionName)));

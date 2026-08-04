@@ -5,7 +5,12 @@ import { createApp } from "./app.js";
 
 const PORT = Number(process.env.API_PORT ?? 3001);
 
-const app = createApp({ db, sendSelfMessage, allowedPhones: config.allowedPhones });
+const app = createApp({
+  db,
+  sendSelfMessage,
+  allowedPhones: config.allowedPhones,
+  cookieSecure: config.cookieSecure,
+});
 app.listen(PORT, () => {
   console.log(`[api] listening on port ${PORT}`);
 });
