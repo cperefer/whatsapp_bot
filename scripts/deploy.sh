@@ -12,6 +12,7 @@ set -euo pipefail
 
 APP_DIR="/opt/app"
 BOT_WORKSPACE="packages/bot"
+API_WORKSPACE="packages/api"
 WEB_WORKSPACE="packages/web"
 APP_NAME="whatsapp-bot"
 
@@ -23,6 +24,14 @@ git reset --hard origin/master
 
 echo "==> Installing dependencies (bot workspace)"
 npm install --workspace="$BOT_WORKSPACE" --no-audit --no-fund
+
+# packages/bot/src/index.ts imports packages/api/src/app.ts directly by
+# relative path (to run the API in the same process, see below) rather than
+# as a declared package dependency, so npm never learns it needs api's deps
+# (express, cookie-parser) -- install them explicitly or start:prod dies
+# with ERR_MODULE_NOT_FOUND for 'express'.
+echo "==> Installing dependencies (api workspace)"
+npm install --workspace="$API_WORKSPACE" --no-audit --no-fund
 
 # Not tracked by git (holds the SQLite DB) -- a fresh clone won't have it.
 mkdir -p "$BOT_WORKSPACE/data"
