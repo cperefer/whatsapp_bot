@@ -337,8 +337,10 @@ cd /opt/app
 # lists every user (e.g. "Miguel,Alicia") before starting the process:
 #   scp .env deploy@<vps-ip>:/opt/app/.env
 npm install --workspace=packages/bot
+npm install --workspace=packages/api   # bot imports packages/api/src/app.ts directly, needs its deps (express, ...)
 mkdir -p packages/bot/data   # not tracked by git — a fresh clone won't have it
 npm run db:migrate --workspace=packages/bot
+npm install --workspace=packages/web && npm run build --workspace=packages/web   # bot serves this build as static files
 pm2 start packages/bot/ecosystem.config.cjs
 pm2 save
 pm2 startup systemd -u deploy --hp /home/deploy   # run the sudo command it prints
@@ -348,13 +350,16 @@ Then link WhatsApp for each user: `pm2 logs whatsapp-bot` prints one QR code per
 
 ### 3. Ongoing deploys (automatic)
 
-Every push to `master` runs `.github/workflows/deploy.yml`, which SSHes in (GitHub Actions → VPS key) and runs `scripts/deploy.sh` on the box:
+Every push to `master` runs `.github/workflows/deploy.yml`, which SSHes in (GitHub Actions → VPS key), does `git fetch` + `git reset --hard origin/master` **from the workflow step itself**, then runs `scripts/deploy.sh` on the box:
 
-1. `git fetch` + `git reset --hard origin/master`
-2. `npm install --workspace=packages/bot` (skips `packages/web` — faster, and the VPS doesn't need it)
+1. `npm install --workspace=packages/bot`
+2. `npm install --workspace=packages/api` (`packages/bot/src/index.ts` imports `packages/api/src/app.ts` directly by relative path to run the API in the same process — not a declared package dependency, so its deps like `express` need installing explicitly)
 3. `npm run db:migrate --workspace=packages/bot` (idempotent — safe to run even with no pending migrations)
-4. `pm2 restart whatsapp-bot` (a full **restart**, not `reload` — `reload` is meant for stateless zero-downtime apps; a WhatsApp socket's connection state should not straddle two processes)
-5. `pm2 save`, then an explicit `pm2 jlist` status check
+4. `npm install --workspace=packages/web` + `npm run build --workspace=packages/web` (the bot serves this build as static files, so it must exist before pm2 (re)starts)
+5. `pm2 restart whatsapp-bot` (a full **restart**, not `reload` — `reload` is meant for stateless zero-downtime apps; a WhatsApp socket's connection state should not straddle two processes)
+6. `pm2 save`, then an explicit `pm2 jlist` status check
+
+The `git fetch`/`reset` deliberately lives in the workflow step, not inside `deploy.sh` itself: bash buffers a script this small into memory on launch, so if `deploy.sh` did `git reset --hard` on its own file mid-run, the already-running process would keep executing the stale buffered content — a newly added deploy step would silently no-op for the deploy that introduced it and only take effect on the *next* one. Keep it that way; don't move the git update back into the script.
 
 `set -euo pipefail` plus that final status check means any failed step — a bad migration, a crash on boot — fails the GitHub Actions run loudly instead of leaving a half-deployed bot. On failure, check the Action logs (last 50 `pm2 logs` lines are printed automatically) or SSH in and run `pm2 logs whatsapp-bot`.
 

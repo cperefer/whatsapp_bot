@@ -1,12 +1,23 @@
 #!/usr/bin/env bash
 # Runs ON THE VPS, invoked over SSH by .github/workflows/deploy.yml on every
-# push to master. Also safe to run manually for the first deploy or to force
-# a redeploy: ssh deploy@<host> 'bash /opt/app/scripts/deploy.sh'
+# push to master. Also safe to run manually for a redeploy, but the caller
+# must update the checkout FIRST and only then invoke this script -- see
+# below for why this file must never git-update itself:
+#   cd /opt/app && git fetch origin master && git reset --hard origin/master \
+#     && bash scripts/deploy.sh
 #
 # Fails loudly on purpose: `set -euo pipefail` plus an explicit post-restart
-# status check mean any broken step (pull, install, migrate, restart) stops
-# the script with a non-zero exit code, which the GitHub Actions job surfaces
-# as a failed run -- never a silent partial deploy.
+# status check mean any broken step (install, migrate, restart) stops the
+# script with a non-zero exit code, which the GitHub Actions job surfaces as
+# a failed run -- never a silent partial deploy.
+#
+# Deliberately does NOT git fetch/reset itself: bash buffers a script this
+# small into memory on launch, so a `git reset --hard` on this same file
+# mid-run rewrites it on disk but the already-running process keeps
+# executing the stale buffered version -- a deploy that's supposed to add a
+# step silently no-ops and only takes effect on the *next* deploy. Keeping
+# the checkout update outside this script (see .github/workflows/deploy.yml)
+# means this file is never modified while it's the one being interpreted.
 
 set -euo pipefail
 
@@ -17,10 +28,6 @@ WEB_WORKSPACE="packages/web"
 APP_NAME="whatsapp-bot"
 
 cd "$APP_DIR"
-
-echo "==> Fetching latest master"
-git fetch origin master
-git reset --hard origin/master
 
 echo "==> Installing dependencies (bot workspace)"
 npm install --workspace="$BOT_WORKSPACE" --no-audit --no-fund

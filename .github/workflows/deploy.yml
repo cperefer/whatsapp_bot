@@ -23,4 +23,8 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           command_timeout: 8m
           script_stop: true
-          script: bash /opt/app/scripts/deploy.sh
+          script: |
+            cd /opt/app
+            git fetch origin master
+            git reset --hard origin/master
+            bash scripts/deploy.sh
