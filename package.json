@@ -4,13 +4,16 @@
   "type": "module",
   "workspaces": [
     "packages/bot",
+    "packages/api",
     "packages/web"
   ],
   "scripts": {
     "bot": "npm run dev --workspace=packages/bot",
+    "api": "npm run dev --workspace=packages/api",
     "web": "npm run dev --workspace=packages/web",
     "db:generate": "npm run db:generate --workspace=packages/bot",
     "db:migrate": "npm run db:migrate --workspace=packages/bot",
-    "eval": "npm run eval --workspace=packages/bot"
+    "eval": "npm run eval --workspace=packages/bot",
+    "test:api": "npm run test --workspace=packages/api"
   }
 }

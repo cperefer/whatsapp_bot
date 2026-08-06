@@ -85,6 +85,36 @@ export const conversationMessages = sqliteTable("conversation_messages", {
   createdAt: integer("created_at").notNull(),
 });
 
+// One-time login codes sent over WhatsApp (self-chat) to authenticate the web
+// dashboard. codeHash is sha256(code) so a DB dump/backup never exposes a
+// usable code; attempts caps brute-forcing the 6-digit space per code.
+export const authCodes = sqliteTable("auth_codes", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
+  codeHash: text("code_hash").notNull(),
+  expiresAt: integer("expires_at").notNull(),
+  consumedAt: integer("consumed_at"),
+  attempts: integer("attempts").notNull().default(0),
+  createdAt: integer("created_at").notNull(),
+});
+
+// Dashboard login sessions. `id` is the opaque session token itself (not a
+// surrogate key) so a lookup is a single indexed equality check; deleting a
+// row revokes that session instantly, which a stateless JWT can't do without
+// an extra blocklist.
+export const sessions = sqliteTable("sessions", {
+  id: text("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
+  createdAt: integer("created_at").notNull(),
+  expiresAt: integer("expires_at").notNull(),
+  userAgent: text("user_agent"),
+});
+
+
 // Tracks inbound WhatsApp message ids already handled by the agent, keyed per
 // session. Persisted (rather than an in-memory Set) so a process restart
 // doesn't forget what it already replied to — Baileys can redeliver the last

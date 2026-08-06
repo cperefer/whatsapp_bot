@@ -24,4 +24,12 @@ export const config = {
     .map((session) => session.trim()),
   dbPath: process.env.DB_PATH ?? "./data/app.db",
   isProduction: process.env.NODE_ENV === "production",
+  // Browsers drop a Secure cookie outright over plain HTTP, so login can't
+  // persist a session until TLS is in front of the app. Defaults to
+  // isProduction, but COOKIE_SECURE=false lets a VPS without a domain/TLS
+  // yet be tested over plain HTTP without permanently weakening prod.
+  cookieSecure:
+    process.env.COOKIE_SECURE != null
+      ? process.env.COOKIE_SECURE === "true"
+      : process.env.NODE_ENV === "production",
 } as const;

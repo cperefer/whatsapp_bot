@@ -12,6 +12,7 @@ set -euo pipefail
 
 APP_DIR="/opt/app"
 BOT_WORKSPACE="packages/bot"
+WEB_WORKSPACE="packages/web"
 APP_NAME="whatsapp-bot"
 
 cd "$APP_DIR"
@@ -20,7 +21,7 @@ echo "==> Fetching latest master"
 git fetch origin master
 git reset --hard origin/master
 
-echo "==> Installing dependencies (bot workspace only)"
+echo "==> Installing dependencies (bot workspace)"
 npm install --workspace="$BOT_WORKSPACE" --no-audit --no-fund
 
 # Not tracked by git (holds the SQLite DB) -- a fresh clone won't have it.
@@ -28,6 +29,15 @@ mkdir -p "$BOT_WORKSPACE/data"
 
 echo "==> Running Drizzle migrations"
 npm run db:migrate --workspace="$BOT_WORKSPACE"
+
+# The bot process serves this build as static files (see packages/api/src/app.ts)
+# -- there's no separate web server/process, so it has to exist before pm2
+# (re)starts, and every deploy rebuilds it since the dashboard ships from master too.
+echo "==> Installing dependencies (web workspace)"
+npm install --workspace="$WEB_WORKSPACE" --no-audit --no-fund
+
+echo "==> Building web frontend"
+npm run build --workspace="$WEB_WORKSPACE"
 
 echo "==> Restarting whatsapp-bot with pm2 (restart, not reload)"
 if pm2 describe "$APP_NAME" >/dev/null 2>&1; then

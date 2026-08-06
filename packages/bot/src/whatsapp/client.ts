@@ -7,6 +7,7 @@ import {
 import type { Boom } from "@hapi/boom";
 import qrcode from "qrcode-terminal";
 import { registerMessageHandlers } from "./handlers.js";
+import { registerActiveSocket, unregisterActiveSocket } from "./sender.js";
 import { logger } from "../logger.js";
 
 const MAX_RECONNECT_DELAY_MS = 60_000;
@@ -37,10 +38,12 @@ export async function startWhatsAppClient(sessionName: string): Promise<void> {
 
     if (connection === "open") {
       reconnectAttempts.delete(sessionName);
+      registerActiveSocket(sessionName, socket);
       logger.info(`[whatsapp:${sessionName}] connected`);
     }
 
     if (connection === "close") {
+      unregisterActiveSocket(sessionName);
       const statusCode = (lastDisconnect?.error as Boom | undefined)?.output?.statusCode;
       // loggedOut: the device was unlinked from the phone. forbidden: WhatsApp
       // rejected the account (e.g. banned). Retrying either just hammers a

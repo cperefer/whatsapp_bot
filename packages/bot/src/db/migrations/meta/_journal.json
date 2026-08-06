@@ -29,6 +29,13 @@
       "when": 1785398781133,
       "tag": "0003_kind_dorian_gray",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1785398781134,
+      "tag": "0004_steep_stranger",
+      "breakpoints": true
     }
   ]
 }
