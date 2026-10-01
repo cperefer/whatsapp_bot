@@ -1,5 +1,5 @@
 import type { WAMessageKey, WASocket } from "@whiskeysockets/baileys";
-import { jidDecode } from "@whiskeysockets/baileys";
+import { jidDecode, proto } from "@whiskeysockets/baileys";
 import { config } from "../config.js";
 import { runAgent } from "../agent/index.js";
 import { transcribeAudio } from "../agent/tools/transcribe.js";
@@ -102,6 +102,18 @@ export function registerMessageHandlers(socket: WASocket, sessionName: string): 
     for (const message of messages) {
       const messageId = message.key.id;
       if (messageId && wasSentByUs(sessionName, messageId)) {
+        continue;
+      }
+
+      // Baileys still emits a "notify" upsert when it fails to decrypt a
+      // message (empty stub, CIPHERTEXT) and then asks the sender's device to
+      // re-send it — the re-sent copy arrives later with the SAME id. Marking
+      // the stub as processed would make us drop that real retry as a
+      // duplicate, so skip it without recording anything.
+      if (message.messageStubType === proto.WebMessageInfo.StubType.CIPHERTEXT) {
+        logger.warn(
+          `[whatsapp:${sessionName}] could not decrypt message ${messageId ?? "unknown"} (${message.messageStubParameters?.[0] ?? "no reason"}), waiting for retry`,
+        );
         continue;
       }
 
